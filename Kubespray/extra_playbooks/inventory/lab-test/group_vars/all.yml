@@ -1,0 +1,14 @@
+bootstrap_os: ubuntu
+download_cache_dir: /tmp/kubespray_cache
+
+# Network configuration to fix API server endpoint issue
+# Force Kubespray to use the cluster network instead of NAT interface
+ip: "{{ ansible_enp0s8['ipv4']['address'] }}"  # Use the private network interface
+access_ip: "{{ ansible_enp0s8['ipv4']['address'] }}"
+advertise_address: "{{ ansible_enp0s8['ipv4']['address'] }}"
+
+# Ensure the API server binds to the correct interface
+kube_apiserver_bind_address: "{{ ansible_enp0s8['ipv4']['address'] }}"
+
+# Override any automatic detection to use cluster network
+override_system_hostname: false

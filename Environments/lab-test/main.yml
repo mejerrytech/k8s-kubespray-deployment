@@ -1,0 +1,102 @@
+# ==============================================================================
+# LAB-TEST CLUSTER DEPLOYMENT CONFIGURATION
+# ==============================================================================
+# This file defines the deployment parameters for the lab-test Kubernetes cluster
+# It references the vars.yml file for environment-specific variables
+# ==============================================================================
+
+# Lab-Test Cluster Configuration
+# Multi-cluster Kubernetes automation with Kubespray
+
+---
+# This file is a template/reference for cluster deployment configuration
+# Actual values come from vars.yml
+
+# Cluster metadata
+cluster_name: "{{ cluster_name }}"
+environment: "{{ environment }}"
+datacenter: "{{ datacenter }}"
+region: "{{ region }}"
+
+# Cluster configuration (from vars.yml)
+cluster:
+  name: "{{ cluster.name }}"
+  container_runtime: "{{ cluster.container_runtime }}"
+  domain: "{{ cluster.domain }}"
+
+# vSphere configuration (from vars.yml)
+vsphere:
+  server: "{{ vsphere.server }}"
+  datacenter: "{{ vsphere.datacenter }}"
+  datastore: "{{ vsphere.datastore }}"
+  resource_pool: "{{ vsphere.resource_pool }}"
+  network: "{{ vsphere.network }}"
+  template: "{{ vsphere.template }}"
+
+# Network configuration (from vars.yml)
+network:
+  prefix: "{{ network.prefix }}"
+  gateway: "{{ network.gateway }}"
+  netmask: "{{ network.netmask }}"
+  dns_servers: "{{ network.dns_servers }}"
+  domain: "{{ network.domain }}"
+  api_vip: "{{ network.api_vip }}"
+  ingress_vip: "{{ network.ingress_vip }}"
+  virtual_ip: "{{ network.virtual_ip }}"
+  haproxy1_ip: "{{ network.haproxy1_ip }}"
+  haproxy2_ip: "{{ network.haproxy2_ip }}"
+  cni: "{{ network.cni }}"
+  service_cidr: "{{ network.service_cidr }}"
+  pod_cidr: "{{ network.pod_cidr }}"
+
+# Node definitions (from vars.yml)
+nodes:
+  masters: "{{ nodes.masters }}"
+  workers: "{{ nodes.workers }}"
+  haproxy: "{{ nodes.haproxy }}"
+
+# HAProxy configuration (from vars.yml)
+haproxy: "{{ haproxy }}"
+
+# Keepalived configuration (from vars.yml)
+keepalived: "{{ keepalived }}"
+
+# Services configuration (from vars.yml)
+services: "{{ services }}"
+
+# OIDC configuration (from vars.yml)
+oidc: "{{ oidc }}"
+
+# Registry configuration (from vars.yml)
+registry: "{{ registry }}"
+
+# Ansible configuration (from vars.yml)
+ansible: "{{ ansible }}"
+
+# Security configuration (from vars.yml)
+security: "{{ security }}"
+
+# Backup configuration (from vars.yml)
+backup: "{{ backup }}"
+
+# Monitoring configuration (from vars.yml)
+monitoring: "{{ monitoring }}"
+
+# Deployment status (from vars.yml)
+status: "{{ status }}"
+
+# Deployment Tasks
+deployment:
+  - system_preparation
+  - infrastructure_provisioning
+  - haproxy_deployment
+  - cluster_deployment
+  - cluster_services
+  - validation
+
+# Validation Checks
+validation:
+  - connectivity_check
+  - service_health_check
+  - cluster_readiness_check
+  - application_deployment_test

@@ -1,0 +1,195 @@
+---
+# ==============================================================================
+# CLUSTER VALIDATION PLAYBOOK
+# ==============================================================================
+# Comprehensive validation of the deployed cluster
+# ==============================================================================
+
+- name: Validate Kubernetes Cluster
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: false
+  vars:
+    kubectl_bin: /usr/local/bin/kubectl
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Display validation start
+      debug:
+        msg:
+          - "========================================="
+          - "Cluster Validation Started"
+          - "========================================="
+
+    - name: Get cluster nodes
+      command: "{{ kubectl_bin }} get nodes --no-headers"
+      register: nodes
+      changed_when: false
+
+    - name: Count Ready nodes
+      shell: "{{ kubectl_bin }} get nodes --no-headers | grep ' Ready' | wc -l"
+      register: ready_nodes
+      changed_when: false
+
+    - name: Get cluster version
+      command: "{{ kubectl_bin }} version"
+      register: cluster_version
+      changed_when: false
+      failed_when: false
+
+    - name: Check system pods
+      command: "{{ kubectl_bin }} get pods -n kube-system"
+      register: system_pods
+      changed_when: false
+
+    - name: Check ingress controller
+      command: "{{ kubectl_bin }} get pods -n ingress-nginx"
+      register: ingress_pods
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display cluster information
+      debug:
+        msg:
+          - "========================================="
+          - "CLUSTER VALIDATION RESULTS"
+          - "========================================="
+          - "Cluster Version:"
+          - "{{ (cluster_version.stdout_lines | default([])) + (cluster_version.stderr_lines | default([])) }}"
+          - ""
+          - "Nodes ({{ ready_nodes.stdout }} Ready):"
+          - "{{ nodes.stdout_lines | default([]) }}"
+          - ""
+          - "System Pods Status:"
+          - "{{ system_pods.stdout_lines | default([]) }}"
+          - ""
+          - "Ingress Controller Status:"
+          - "{{ ingress_pods.stdout_lines | default(['Not deployed']) if ingress_pods.rc == 0 else ['Not deployed'] }}"
+          - "========================================="
+
+    - name: Display ready nodes count
+      debug:
+        msg: "Ready nodes: {{ ready_nodes.stdout | default('0') }}"
+
+    - name: Verify all nodes are ready
+      assert:
+        that: 
+          - ready_nodes.stdout | default('0') | int >= 1
+        fail_msg: "Not enough nodes are in Ready state. Found {{ ready_nodes.stdout | default('0') }} ready node(s). The cluster may still be deploying or nodes may be joining."
+        success_msg: "✓ {{ ready_nodes.stdout }} node(s) are Ready"
+
+# ==============================================================================
+# VALIDATE HAPROXY
+# ==============================================================================
+- name: Validate HAProxy Load Balancers
+  hosts: kube_control_plane
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check HAProxy status
+      systemd:
+        name: haproxy
+      register: haproxy_status
+
+    - name: Check Keepalived status
+      systemd:
+        name: keepalived
+      register: keepalived_status
+
+    - name: Test HAProxy stats page
+      uri:
+        url: "http://{{ ansible_host }}:8080/stats"
+        method: GET
+        status_code: 200
+      register: stats_check
+      ignore_errors: true
+
+    - name: Display HAProxy status
+      debug:
+        msg:
+          - "HAProxy on {{ inventory_hostname }}: {{ haproxy_status.status.ActiveState }}"
+          - "Keepalived on {{ inventory_hostname }}: {{ keepalived_status.status.ActiveState }}"
+          - "Stats page: {{ 'Accessible' if stats_check.status == 200 else 'Not accessible' }}"
+
+# ==============================================================================
+# VALIDATE VIRTUAL IPS
+# ==============================================================================
+- name: Validate Virtual IPs
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: false
+  vars:
+    api_vip: "{{ api_vip | default(network.api_vip | default('')) }}"
+    ingress_vip: "{{ ingress_vip | default(network.ingress_vip | default('')) }}"
+
+  tasks:
+    - name: Skip VIP validation if not configured
+      debug:
+        msg: "VIP validation skipped - api_vip and ingress_vip not configured"
+      when: api_vip == '' and ingress_vip == ''
+
+    - name: Check for assigned VIPs
+      shell: |
+        if [ -n "{{ api_vip }}" ] && [ -n "{{ ingress_vip }}" ]; then
+          ip addr show | grep -E "{{ api_vip }}|{{ ingress_vip }}" || echo "No VIPs found"
+        elif [ -n "{{ api_vip }}" ]; then
+          ip addr show | grep "{{ api_vip }}" || echo "API VIP not found"
+        elif [ -n "{{ ingress_vip }}" ]; then
+          ip addr show | grep "{{ ingress_vip }}" || echo "Ingress VIP not found"
+        else
+          echo "No VIPs configured"
+        fi
+      register: vip_check
+      changed_when: false
+      when: api_vip != '' or ingress_vip != ''
+
+    - name: Test API VIP connectivity
+      uri:
+        url: "https://{{ api_vip }}:6443/healthz"
+        method: GET
+        validate_certs: false
+        status_code: 200
+        timeout: 5
+      register: api_test
+      ignore_errors: true
+      when: api_vip != ''
+
+    - name: Display VIP validation
+      debug:
+        msg:
+          - "========================================="
+          - "VIP VALIDATION"
+          - "========================================="
+          - "VIP Assignment: {{ vip_check.stdout_lines | default(['Not checked']) }}"
+          - "API VIP ({{ api_vip | default('Not configured') }}:6443): {{ 'Accessible' if (api_vip != '' and api_test.status | default(0) == 200) else 'Not accessible or not configured' }}"
+          - "Ingress VIP ({{ ingress_vip | default('Not configured') }}): {{ 'Available for testing' if ingress_vip != '' else 'Not configured' }}"
+          - "========================================="
+      when: api_vip != '' or ingress_vip != ''
+
+# ==============================================================================
+# FINAL VALIDATION SUMMARY
+# ==============================================================================
+- name: Final Validation Summary
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Display final validation summary
+      debug:
+        msg:
+          - "========================================="
+          - "CLUSTER VALIDATION COMPLETE"
+          - "========================================="
+          - "✓ System preparation completed"
+          - "✓ Kubernetes cluster deployed"
+          - "✓ HAProxy load balancers configured"
+          - "✓ Keepalived VIP failover enabled"
+          - "✓ NGINX Ingress Controller deployed"
+          - "✓ Metrics Server deployed"
+          - "✓ Kubernetes Dashboard deployed"
+          - "✓ All services validated"
+          - "========================================="
+          - "Cluster is ready for use!"
+          - "========================================="

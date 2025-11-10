@@ -1,0 +1,125 @@
+---
+# ==============================================================================
+# BACKUP SETUP PLAYBOOK
+# ==============================================================================
+# This playbook sets up automated backups for etcd and Kubernetes namespaces
+# Based on configuration in vars.yml
+# ==============================================================================
+
+- name: Setup Backup Scripts and Cron Jobs
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: true
+  vars:
+    backup_config: "{{ backup | default({}) }}"
+    backup_enabled: "{{ backup_config.enabled | default(false) }}"
+    etcd_backup_enabled: "{{ backup_config.etcd_backup_enabled | default(false) }}"
+    namespace_backup_enabled: "{{ backup_config.namespace_backup_enabled | default(false) }}"
+    backup_path: "{{ backup_config.backup_path | default('/opt/backups/k8s') }}"
+    retention_days: "{{ backup_config.retention_days | default(7) }}"
+    etcd_backup_schedule: "{{ backup_config.etcd_backup_schedule | default('0 2 * * *') }}"
+    namespace_backup_schedule: "{{ backup_config.namespace_backup_schedule | default('0 5 * * *') }}"
+    exclude_namespaces: "{{ backup_config.exclude_namespaces | default(['kube-system', 'kube-public']) }}"
+
+  tasks:
+    # Set Kubespray paths from inventory or use defaults (avoid recursive loops)
+    - name: Set Kubespray paths
+      set_fact:
+        etcd_cert_dir: "{{ etcd_cert_dir | default('/etc/ssl/etcd/ssl') }}"
+        etcd_access_addresses: "{{ etcd_access_addresses | default('https://127.0.0.1:2379') }}"
+        bin_dir: "{{ bin_dir | default('/usr/local/bin') }}"
+        kube_cert_dir: "{{ kube_cert_dir | default('/etc/kubernetes/ssl') }}"
+    - name: Check if backup is enabled
+      debug:
+        msg: "Backup setup skipped - backup.enabled is false"
+      when: not backup_enabled
+      changed_when: false
+
+    - name: Display backup configuration
+      debug:
+        msg:
+          - "Backup enabled: {{ backup_enabled }}"
+          - "ETCD backup enabled: {{ etcd_backup_enabled }}"
+          - "Namespace backup enabled: {{ namespace_backup_enabled }}"
+          - "Backup path: {{ backup_path }}"
+          - "Retention days: {{ retention_days }}"
+      when: backup_enabled
+
+    - name: Create backup scripts directory
+      file:
+        path: "{{ backup_path }}/scripts"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      when: backup_enabled
+
+    - name: Deploy etcd backup script
+      template:
+        src: ../templates/backup-etcd.sh.j2
+        dest: "{{ backup_path }}/scripts/backup-etcd.sh"
+        mode: '0755'
+        owner: root
+        group: root
+      when:
+        - backup_enabled
+        - etcd_backup_enabled
+      vars:
+        etcd_backup_dir: "{{ backup_path }}/etcd-backups"
+        etcd_backup_retention_days: "{{ retention_days }}"
+        etcd_endpoints: "{{ etcd_access_addresses.split(',') | first }}"
+
+    - name: Deploy Kubernetes namespace backup script
+      template:
+        src: ../templates/backup-k8s-namespaces.sh.j2
+        dest: "{{ backup_path }}/scripts/backup-k8s-namespaces.sh"
+        mode: '0755'
+        owner: root
+        group: root
+      when:
+        - backup_enabled
+        - namespace_backup_enabled
+      vars:
+        k8s_backup_root: "{{ backup_path }}"
+        k8s_backup_retention_days: "{{ retention_days }}"
+        exclude_ns_string: "{{ exclude_namespaces | join(' ') }}"
+
+    - name: Setup etcd backup cron job
+      cron:
+        name: "ETCD Backup"
+        minute: "{{ etcd_backup_schedule.split()[0] }}"
+        hour: "{{ etcd_backup_schedule.split()[1] }}"
+        day: "{{ etcd_backup_schedule.split()[2] }}"
+        month: "{{ etcd_backup_schedule.split()[3] }}"
+        weekday: "{{ etcd_backup_schedule.split()[4] | default('*') }}"
+        job: "{{ backup_path }}/scripts/backup-etcd.sh > /dev/null 2>&1"
+        user: root
+        state: present
+      when:
+        - backup_enabled
+        - etcd_backup_enabled
+
+    - name: Setup namespace backup cron job
+      cron:
+        name: "Kubernetes Namespace Backup"
+        minute: "{{ namespace_backup_schedule.split()[0] }}"
+        hour: "{{ namespace_backup_schedule.split()[1] }}"
+        day: "{{ namespace_backup_schedule.split()[2] }}"
+        month: "{{ namespace_backup_schedule.split()[3] }}"
+        weekday: "{{ namespace_backup_schedule.split()[4] | default('*') }}"
+        job: "{{ backup_path }}/scripts/backup-k8s-namespaces.sh > /dev/null 2>&1"
+        user: root
+        state: present
+      when:
+        - backup_enabled
+        - namespace_backup_enabled
+
+    - name: Display backup setup summary
+      debug:
+        msg:
+          - "✅ Backup setup completed"
+          - "ETCD backup: {{ 'Enabled' if etcd_backup_enabled else 'Disabled' }}"
+          - "Namespace backup: {{ 'Enabled' if namespace_backup_enabled else 'Disabled' }}"
+          - "Backup scripts location: {{ backup_path }}/scripts"
+      when: backup_enabled
+

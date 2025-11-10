@@ -1,0 +1,157 @@
+---
+# Pre-flight preparation matching client's kubebootstrap.sh
+# This runs BEFORE Kubespray to prepare nodes exactly like client does
+
+- name: Client-Compatible System Preparation
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Match client's versions if needed
+    client_k8s_version: "1.28.0"  # Update based on client's current version
+  
+  tasks:
+    - name: Display node being configured
+      debug:
+        msg: "Preparing {{ inventory_hostname }} ({{ ansible_host }})"
+    
+    # ===== SWAP MANAGEMENT =====
+    - name: Disable swap immediately
+      command: swapoff -a
+      changed_when: false
+    
+    - name: Disable swap permanently in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+.*)$'
+        replace: '# \1'
+    
+    # ===== SELINUX (Client disables it) =====
+    - name: Set SELinux to permissive (client approach)
+      selinux:
+        policy: targeted
+        state: permissive
+      when: ansible_selinux.status == "enabled"
+    
+    - name: Ensure SELinux stays permissive after reboot
+      lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: 'SELINUX=permissive'
+    
+    # ===== FIREWALL (Client disables for testing) =====
+    # - name: Stop and disable firewalld (client approach)
+    #   systemd:
+    #     name: firewalld
+    #     state: stopped
+    #     enabled: no
+    #   ignore_errors: yes
+    
+    # ===== KERNEL MODULES (Critical for K8s) =====
+    - name: Load kernel modules immediately
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+        - ip_vs
+        - ip_vs_rr
+        - ip_vs_wrr
+        - ip_vs_sh
+        - nf_conntrack
+      ignore_errors: yes
+    
+    - name: Ensure kernel modules load on boot
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          br_netfilter
+          overlay
+          ip_vs
+          ip_vs_rr
+          ip_vs_wrr
+          ip_vs_sh
+          nf_conntrack
+    
+    # ===== SYSCTL SETTINGS (Client's exact config) =====
+    - name: Configure sysctl for Kubernetes (client pattern)
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/k8s.conf
+        reload: yes
+      loop:
+        - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { key: 'net.ipv4.ip_forward', value: '1' }
+        - { key: 'net.ipv6.conf.all.disable_ipv6', value: '0' }
+        - { key: 'net.ipv6.conf.default.disable_ipv6', value: '0' }
+        - { key: 'fs.inotify.max_user_watches', value: '524288' }
+        - { key: 'fs.inotify.max_user_instances', value: '512' }
+    
+    # ===== PACKAGE INSTALLATION =====
+    - name: Install required packages (client's list)
+      dnf:
+        name:
+          - wget
+          - curl
+          - vim
+          - net-tools
+          - iproute
+          - ipvsadm
+          - ipset
+          - sshpass
+          - python3-pip
+          - tar
+          - nfs-utils
+        state: present
+    
+    # ===== CONTAINER RUNTIME PREP =====
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+    
+    - name: Configure containerd for systemd cgroup
+      copy:
+        dest: /etc/containerd/config.toml
+        content: |
+          version = 2
+          [plugins]
+            [plugins."io.containerd.grpc.v1.cri"]
+              [plugins."io.containerd.grpc.v1.cri".containerd]
+                [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+                  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+                    runtime_type = "io.containerd.runc.v2"
+                    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+                      SystemdCgroup = true
+    
+    # ===== NETWORK INTERFACE VALIDATION =====
+    - name: Verify eth1 interface exists (our private network)
+      command: ip addr show eth1
+      changed_when: false
+      register: eth1_check
+    
+    - name: Display eth1 IP address
+      debug:
+        msg: "eth1 IP: {{ ansible_eth1.ipv4.address }}"
+      when: ansible_eth1 is defined
+    
+    # ===== FINAL CHECKS =====
+    - name: Test DNS resolution
+      command: ping -c 2 registry.k8s.io
+      changed_when: false
+      ignore_errors: yes
+      register: dns_test
+    
+    - name: Display DNS test result
+      debug:
+        msg: "{{ 'DNS working ✓' if dns_test.rc == 0 else 'DNS may have issues ⚠' }}"
+    
+    - name: Node preparation complete
+      debug:
+        msg: "{{ inventory_hostname }} is ready for Kubespray deployment"

@@ -1,0 +1,232 @@
+---
+# ==============================================================================
+# POST-DEPLOYMENT WORKER NODE FIX PLAYBOOK
+# ==============================================================================
+# Automatically fixes worker node kubelet configuration to use correct API server
+# This playbook detects the best API server address (VIP or master IP) and
+# updates all worker nodes dynamically.
+# ==============================================================================
+
+- name: Fix Worker Node Kubelet Configuration
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: true
+  vars:
+    kubectl_bin: /usr/local/bin/kubectl
+    kubelet_config_path: /etc/kubernetes/kubelet.conf
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Display fix start
+      debug:
+        msg:
+          - "========================================="
+          - "Worker Node Kubelet Configuration Fix"
+          - "========================================="
+          - "This playbook will automatically detect and configure"
+          - "the correct API server address for worker nodes."
+
+    - name: Get master node IP
+      set_fact:
+        master_ip: "{{ ansible_default_ipv4.address }}"
+
+    - name: Get API VIP from inventory or vars
+      set_fact:
+        api_vip: "{{ api_vip | default(virtual_ip | default('')) }}"
+
+    - name: Get master node IP from cluster info
+      command: "{{ kubectl_bin }} cluster-info"
+      register: cluster_info
+      changed_when: false
+      failed_when: false
+
+    - name: Extract master IP from cluster info
+      set_fact:
+        master_ip_from_cluster: "{{ cluster_info.stdout | regex_search('https://([0-9.]+):6443', '\\1') | first }}"
+      when: cluster_info.rc == 0
+
+    - name: Set master IP
+      set_fact:
+        master_ip: "{{ master_ip_from_cluster | default(master_ip) }}"
+
+    - name: Display detected configuration
+      debug:
+        msg:
+          - "Detected configuration:"
+          - "  Master IP: {{ master_ip }}"
+          - "  API VIP: {{ api_vip | default('Not configured') }}"
+
+    - name: Test API VIP connectivity
+      uri:
+        url: "https://{{ api_vip }}:6443/healthz"
+        method: GET
+        validate_certs: false
+        timeout: 5
+      register: vip_test
+      failed_when: false
+      when: api_vip | default('') != ''
+
+    - name: Determine best API server address
+      set_fact:
+        api_server_address: "{{ api_vip if (api_vip | default('') != '' and vip_test.status | default(0) == 200) else master_ip }}"
+        api_server_used: "{{ 'VIP' if (api_vip | default('') != '' and vip_test.status | default(0) == 200) else 'Master IP' }}"
+
+    - name: Display selected API server
+      debug:
+        msg:
+          - "Selected API server: {{ api_server_address }} ({{ api_server_used }})"
+          - "{{ 'VIP is reachable' if (api_vip | default('') != '' and vip_test.status | default(0) == 200) else 'VIP not reachable, using master IP' }}"
+
+    - name: Add API server address to all worker nodes
+      add_host:
+        name: "{{ item }}"
+        groups: workers_to_fix
+        api_server_address: "{{ api_server_address }}"
+      loop: "{{ groups['kube_node'] | default([]) }}"
+      changed_when: false
+
+- name: Update Worker Node Kubelet Configuration
+  hosts: kube_node
+  become: true
+  gather_facts: true
+  vars:
+    kubelet_config_path: /etc/kubernetes/kubelet.conf
+    api_server_address: "{{ hostvars[groups['kube_control_plane'][0]]['api_server_address'] | default(master_ip | default('192.168.56.153')) }}"
+
+  tasks:
+    - name: Check if kubelet.conf exists
+      stat:
+        path: "{{ kubelet_config_path }}"
+      register: kubelet_conf_stat
+
+    - name: Skip if kubelet.conf doesn't exist
+      debug:
+        msg: "kubelet.conf not found, skipping node {{ inventory_hostname }}"
+      when: not kubelet_conf_stat.stat.exists
+
+    - name: Backup existing kubelet.conf
+      copy:
+        src: "{{ kubelet_config_path }}"
+        dest: "{{ kubelet_config_path }}.backup-{{ ansible_date_time.epoch }}"
+        remote_src: true
+      when: kubelet_conf_stat.stat.exists
+
+    - name: Read current kubelet.conf
+      slurp:
+        src: "{{ kubelet_config_path }}"
+      register: kubelet_config_content
+      changed_when: false
+      when: kubelet_conf_stat.stat.exists
+
+    - name: Decode kubelet.conf
+      set_fact:
+        kubelet_config_yaml: "{{ kubelet_config_content.content | b64decode | from_yaml }}"
+      when: kubelet_conf_stat.stat.exists
+
+    - name: Check current API server address
+      set_fact:
+        current_server: "{{ kubelet_config_yaml.clusters[0].cluster.server | default('') }}"
+      when: 
+        - kubelet_conf_stat.stat.exists
+        - kubelet_config_yaml is defined
+        - kubelet_config_yaml.clusters is defined
+        - kubelet_config_yaml.clusters | length > 0
+
+    - name: Determine if update is needed
+      set_fact:
+        needs_update: "{{ current_server | default('') != 'https://' + api_server_address + ':6443' }}"
+      when: 
+        - kubelet_conf_stat.stat.exists
+        - current_server is defined
+
+    - name: Display current configuration
+      debug:
+        msg:
+          - "Node: {{ inventory_hostname }}"
+          - "Current API server: {{ current_server | default('Not found') }}"
+          - "Target API server: https://{{ api_server_address }}:6443"
+          - "Needs update: {{ needs_update | default(false) }}"
+      when: kubelet_conf_stat.stat.exists
+
+    - name: Update kubelet.conf with correct API server using sed (simpler approach)
+      replace:
+        path: "{{ kubelet_config_path }}"
+        regexp: 'server: https://[^:]+:6443'
+        replace: 'server: https://{{ api_server_address }}:6443'
+        backup: false
+      when: 
+        - kubelet_conf_stat.stat.exists
+        - needs_update | default(false)
+
+    - name: Restart kubelet service
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: true
+      when: 
+        - kubelet_conf_stat.stat.exists
+        - needs_update | default(false)
+
+    - name: Wait for kubelet to stabilize
+      pause:
+        seconds: 5
+      when: 
+        - kubelet_conf_stat.stat.exists
+        - needs_update | default(false)
+
+- name: Verify Worker Nodes
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: false
+  vars:
+    kubectl_bin: /usr/local/bin/kubectl
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Get current worker node status
+      command: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep Ready | wc -l"
+      register: ready_workers
+      changed_when: false
+      failed_when: false
+
+    - name: Check if all workers are already ready
+      set_fact:
+        all_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
+
+    - name: Wait for nodes to become ready (only if not all ready)
+      command: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep Ready | wc -l"
+      register: ready_workers
+      until: ready_workers.stdout | int == groups['kube_node'] | length
+      retries: 6
+      delay: 5
+      changed_when: false
+      failed_when: false
+      when: not all_ready | default(false) | bool
+
+    - name: Get final node status
+      command: "{{ kubectl_bin }} get nodes -o wide"
+      register: node_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check if all workers are ready
+      set_fact:
+        all_workers_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
+      when: ready_workers is defined
+
+    - name: Display final status
+      debug:
+        msg:
+          - "========================================="
+          - "Worker Node Fix Complete"
+          - "========================================="
+          - "Ready workers: {{ ready_workers.stdout | default('N/A') }}/{{ groups['kube_node'] | length }}"
+          - "Status: {{ 'All workers ready' if (all_workers_ready | default(false)) else 'Some workers may not be ready yet' }}"
+          - ""
+          - "Node Status:"
+          - "{{ node_status.stdout_lines | default(['Unable to get node status']) }}"
+          - "========================================="
+      when: ready_workers is defined or node_status is defined
+

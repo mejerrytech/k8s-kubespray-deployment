@@ -1,0 +1,45 @@
+---
+- name: Load bridge kernel module before Kubespray
+  hosts: k8s_cluster
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Load br_netfilter module
+      community.general.modprobe:
+        name: br_netfilter
+        state: present
+      ignore_errors: yes
+
+    - name: Load bridge module
+      community.general.modprobe:
+        name: bridge
+        state: present
+      ignore_errors: yes
+
+    - name: Ensure modules load on boot
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          br_netfilter
+          bridge
+          overlay
+        mode: '0644'
+
+    - name: Load overlay module
+      community.general.modprobe:
+        name: overlay
+        state: present
+      ignore_errors: yes
+
+    - name: Apply sysctl bridge settings
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_set: yes
+        reload: yes
+      loop:
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+      ignore_errors: yes

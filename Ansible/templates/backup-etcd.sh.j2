@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# ETCD Backup Script for Kubespray
+# Generated automatically - do not edit manually
+# {{ ansible_managed }}
+#
+# Cron example: {{ etcd_backup_schedule }} {{ backup_path }}/scripts/backup-etcd.sh > /dev/null 2>&1
+
+set -euo pipefail
+
+# Configuration
+BACKUPDIR="{{ etcd_backup_dir }}"
+BACKUP_FILE_PFX="snapshotdb-"
+DATE=$(date '+%Y-%m-%d')
+BACKUP_FILE="${BACKUPDIR}/${BACKUP_FILE_PFX}${DATE}"
+ETCDCTL_API=3
+
+# Kubespray paths
+ETCDCTL_BIN="{{ bin_dir }}/etcdctl"
+ETCD_ENDPOINTS="{{ etcd_endpoints }}"
+ETCD_CERT_DIR="{{ etcd_cert_dir }}"
+
+# TLS certificates
+ETCD_CA="${ETCD_CERT_DIR}/ca.pem"
+ETCD_CERT="${ETCD_CERT_DIR}/admin-$(hostname).pem"
+ETCD_KEY="${ETCD_CERT_DIR}/admin-$(hostname)-key.pem"
+
+# Retention days
+RETENTION_DAYS="{{ etcd_backup_retention_days }}"
+
+# Create backup directory if it doesn't exist
+if [ ! -d "$BACKUPDIR" ]; then
+    mkdir -p "$BACKUPDIR"
+    chmod 700 "$BACKUPDIR"
+fi
+
+# Check if etcdctl exists
+if [ ! -f "$ETCDCTL_BIN" ]; then
+    echo "ERROR: etcdctl not found at $ETCDCTL_BIN"
+    exit 1
+fi
+
+# Perform etcd snapshot
+export ETCDCTL_API=$ETCDCTL_API
+export ETCDCTL_ENDPOINTS="$ETCD_ENDPOINTS"
+export ETCDCTL_CERT="$ETCD_CERT"
+export ETCDCTL_KEY="$ETCD_KEY"
+export ETCDCTL_CACERT="$ETCD_CA"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting etcd backup: $BACKUP_FILE"
+"$ETCDCTL_BIN" snapshot save "$BACKUP_FILE"
+
+# Verify backup
+"$ETCDCTL_BIN" snapshot status "$BACKUP_FILE"
+
+# Compress backup
+gzip -f "$BACKUP_FILE"
+BACKUP_FILE="${BACKUP_FILE}.gz"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backup completed: $BACKUP_FILE"
+
+# Cleanup old backups (keep only RETENTION_DAYS)
+if [ $(ls "${BACKUPDIR}/${BACKUP_FILE_PFX}"* 2>/dev/null | wc -l) -gt "$RETENTION_DAYS" ]; then
+    find "$BACKUPDIR" -name "${BACKUP_FILE_PFX}*" -mtime +$((RETENTION_DAYS - 1)) -exec rm -f {} \;
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Cleaned up old backups (retention: $RETENTION_DAYS days)"
+fi
+
+exit 0
+
