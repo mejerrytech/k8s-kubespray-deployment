@@ -129,12 +129,8 @@ keepalived:
   smtp_server: "mx.medimpact.com"
   smtp_connect_timeout: 30
   interface: "eth0"  
-  api_virtual_router_id: 33
-  ingress_virtual_router_id: 33
-  api_auth_pass: "supersecret1"
-  ingress_auth_pass: "supersecret1"
 
- 
+
 # OIDC AUTHENTICATION CONFIGURATION
 oidc:
   enabled: true

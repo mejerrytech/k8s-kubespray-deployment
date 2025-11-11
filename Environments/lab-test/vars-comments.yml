@@ -269,12 +269,7 @@ keepalived:
   smtp_server: "mx.medimpact.com"
   smtp_connect_timeout: 30
   interface: "eth0"  # interface name (RHEL/CentOS 7): eth0, eth1, eth2 k8s-terraform-master\Kubernetes Clusters\k8calab2\RemoteBuildFiles-calab\keepalived-dv1medk8lab2proxy1.conf line 28
-  
-  # ⚠️ ENTIRE SECTION NOT IN OLD REPOS REPOS - Advanced Kubespray feature
-  api_virtual_router_id: 33
-  ingress_virtual_router_id: 33
-  api_auth_pass: "supersecret1"
-  ingress_auth_pass: "supersecret1"
+
 
 # ==============================================================================
 # OIDC AUTHENTICATION CONFIGURATION
