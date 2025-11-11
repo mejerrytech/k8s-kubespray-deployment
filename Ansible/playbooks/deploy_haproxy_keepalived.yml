@@ -287,7 +287,7 @@
                   auth_pass {{ keepalived.auth_pass | default(keepalived_auth_pass) }}
               }
               virtual_ipaddress {
-                  {{ virtual_ip }}/24
+                  {{ virtual_ip }} dev {{ keepalived.interface }}
               }
               track_script {
                   chk_haproxy
