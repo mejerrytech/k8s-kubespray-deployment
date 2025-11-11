@@ -240,7 +240,23 @@ deploy_cluster() {
         print_warning "Worker node fix had issues (cluster may still be functional)"
     fi
     
-    # Step 5: Setup backups (if enabled)
+    # Step 5: Fix worker and master node kubelet cgroup configuration
+    print_step "Phase 5: Fixing worker and master node kubelet cgroup configuration"
+    
+    ansible-playbook \
+        -i "$INVENTORY_DIR/inventory.ini" \
+        -e "@$VARS_FILE" \
+        -e "cluster_name=${CLUSTER_NAME}" \
+        --become \
+        Ansible/playbooks/fix_cgroup_conf_kubelet.yml
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Worker and Master node cgroup configuration fix completed"
+    else
+        print_warning "Worker and Master node cgroup configuration fix had issues (cluster may still be functional)"
+    fi
+
+    # Step 6: Setup backups (if enabled)
     backup_enabled=$(get_yaml_value "backup.enabled")
     if [[ "$backup_enabled" == "True" ]] || [[ "$backup_enabled" == "true" ]]; then
         print_step "Phase 5: Setting up automated backups"
@@ -261,7 +277,7 @@ deploy_cluster() {
         print_info "Backup setup skipped (backup.enabled: false)"
     fi
     
-    # Step 6: Setup maintenance (if enabled)
+    # Step 7: Setup maintenance (if enabled)
     maintenance_enabled=$(get_yaml_value "services.setup_maintenance")
     if [[ "$maintenance_enabled" == "True" ]] || [[ "$maintenance_enabled" == "true" ]]; then
         print_step "Phase 6: Setting up maintenance tasks"
@@ -282,8 +298,8 @@ deploy_cluster() {
         print_info "Maintenance setup skipped (services.setup_maintenance: false)"
     fi
     
-    # Step 7: Validate deployment
-    print_step "Phase 7: Deployment validation"
+    # Step 8: Validate deployment
+    print_step "Phase 8: Deployment validation"
     
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
