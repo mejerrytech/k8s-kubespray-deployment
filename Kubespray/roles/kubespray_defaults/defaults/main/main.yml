@@ -785,7 +785,7 @@ scheduler_plugins_enabled: false
 
 ## NTP Settings
 # Start the ntpd or chrony service and enable it at system boot.
-ntp_enabled: false
+ntp_enabled: true
 
 # TODO: Refactor NTP package selection to integrate with the general package installation system
 # instead of using a separate variable approach
