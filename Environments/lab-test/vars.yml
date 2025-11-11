@@ -35,6 +35,8 @@ network:
   cni: "calico"
   service_cidr: "10.246.0.0/16" 
   pod_cidr: "10.246.0.0/16" 
+  haproxy1_ip: "10.13.103.221"
+  haproxy2_ip: "10.13.103.222"
 
  
 # NODE DEFINITIONS
@@ -186,7 +188,7 @@ system:
 backup: 
   enabled: true  
   retention_days: 7
-  backup_path: "'/opt/app/etcd-backups"
+  backup_path: "/opt/app/etcd-backups"
   etcd_backup_enabled: true
   etcd_backup_schedule: "0 4 * * *"
   namespace_backup_enabled: true
