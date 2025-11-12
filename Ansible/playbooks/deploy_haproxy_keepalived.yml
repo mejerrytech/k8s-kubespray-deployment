@@ -98,26 +98,6 @@
         - /run/haproxy
         - /var/lib/haproxy
 
-    - name: Install required packages
-      package:
-        name:
-          - haproxy
-          - keepalived
-          - curl
-          - net-tools
-        state: present
-
-    - name: Create HAProxy runtime directories
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: haproxy
-        group: haproxy
-        mode: '0755'
-      loop:
-        - /run/haproxy
-        - /var/lib/haproxy
-
     # ==============================================================================
     # PHASE 4: KUBERNETES NODES DISCOVERY
     # ==============================================================================
@@ -185,13 +165,14 @@
               option forwardfor except 127.0.0.0/8
               option redispatch
               retries 3
-              timeout http-request 10s
-              timeout queue 20s
-              timeout connect 10s
-              timeout client 20s
-              timeout server 20s
-              timeout http-keep-alive 10s
-              timeout check 10s
+              timeout http-request {{ haproxy.timeout_connect | default('10s') }}
+              timeout queue {{ haproxy.timeout_queue | default('1m') }}
+              timeout connect {{ haproxy.timeout_connect | default('10s') }}
+              timeout client {{ haproxy.timeout_client | default('1m') }}
+              timeout server {{ haproxy.timeout_server | default('1m') }}
+              timeout http-keep-alive {{ haproxy.timeout_http_keep_alive | default('10s') }}
+              timeout check {{ haproxy.timeout_check | default('10s') }}
+              maxconn {{ haproxy_maxconn_defaults }}
 
           # Kubernetes API Server Load Balancing
           frontend k8s_api_frontend
@@ -354,6 +335,17 @@
       retries: 5
       delay: 3
       ignore_errors: true
+
+    - name: Test HAProxy health check endpoint
+      uri:
+        url: "http://localhost:{{ haproxy_health_check_port }}/healthz"
+        method: GET
+        status_code: 200
+      register: haproxy_health_test
+      retries: 5
+      delay: 3
+      ignore_errors: true
+      when: haproxy_enable_health_endpoint
 
     - name: Check virtual IP assignment
       shell: ip addr show {{ ansible_default_ipv4.interface }} | grep "{{ virtual_ip }}"
