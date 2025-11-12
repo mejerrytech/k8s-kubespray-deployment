@@ -126,6 +126,7 @@ k8s-multi-cluster-automation-feature-kubespray-automation/
 │   │   ├── prepare_system.yml           # System preparation
 │   │   ├── deploy_haproxy_keepalived.yml # HAProxy deployment
 │   │   ├── fix_worker_kubelet.yml       # Worker node fixes
+│   │   ├── fix_cgroup_conf_kubelet.yml  # Kubernetes node cgroup fixes
 │   │   ├── setup_backup.yml             # Backup setup
 │   │   ├── setup_maintenance.yml        # Maintenance setup
 │   │   └── validate_cluster.yml         # Cluster validation
@@ -301,16 +302,20 @@ When you run `./script.sh deploy`, it executes these phases:
 - Fix kubelet configuration on worker nodes
 - Ensure correct API server endpoint
 
-### **Phase 5: Backup Setup** (if enabled)
+### **Phase 5: Kubernetes Node Fix**
+- Fix kubelet configuration on master and worker nodes
+- Ensure correct cgroup configurations applied
+
+### **Phase 6: Backup Setup** (if enabled)
 - Deploy etcd backup scripts
 - Deploy Kubernetes namespace backup scripts
 - Configure cron jobs
 
-### **Phase 6: Maintenance Setup** (if enabled)
+### **Phase 7: Maintenance Setup** (if enabled)
 - Deploy etcd defragmentation scripts
 - Configure maintenance cron jobs
 
-### **Phase 7: Validation**
+### **Phase 8: Validation**
 - Verify cluster health
 - Check node status
 - Validate services

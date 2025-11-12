@@ -16,7 +16,6 @@
 cluster_name: "{{ cluster_name }}"
 environment: "{{ environment }}"
 datacenter: "{{ datacenter }}"
-region: "{{ region }}"
 
 # Cluster configuration (from vars.yml)
 cluster:
@@ -66,9 +65,6 @@ services: "{{ services }}"
 
 # OIDC configuration (from vars.yml)
 oidc: "{{ oidc }}"
-
-# Registry configuration (from vars.yml)
-registry: "{{ registry }}"
 
 # Ansible configuration (from vars.yml)
 ansible: "{{ ansible }}"

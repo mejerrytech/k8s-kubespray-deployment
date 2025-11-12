@@ -36,6 +36,8 @@ network:
   cni: "calico"
   service_cidr: "10.246.0.0/16" 
   pod_cidr: "10.246.0.0/16" 
+  haproxy1_ip: "10.13.103.221"
+  haproxy2_ip: "10.13.103.222"
 
  
 # NODE DEFINITIONS
@@ -133,12 +135,8 @@ keepalived:
   smtp_server: "mx.medimpact.com"
   smtp_connect_timeout: 30
   interface: "eth0"  
-  api_virtual_router_id: 33
-  ingress_virtual_router_id: 33
-  api_auth_pass: "supersecret1"
-  ingress_auth_pass: "supersecret1"
 
- 
+
 # OIDC AUTHENTICATION CONFIGURATION
 oidc:
   enabled: true
@@ -194,7 +192,7 @@ system:
 backup: 
   enabled: true  
   retention_days: 7
-  backup_path: "'/opt/app/etcd-backups"
+  backup_path: "/opt/app/etcd-backups"
   etcd_backup_enabled: true
   etcd_backup_schedule: "0 4 * * *"
   namespace_backup_enabled: true

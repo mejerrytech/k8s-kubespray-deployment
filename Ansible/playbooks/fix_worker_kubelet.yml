@@ -186,7 +186,7 @@
 
   tasks:
     - name: Get current worker node status
-      command: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep Ready | wc -l"
+      shell: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep ' Ready' | wc -l"
       register: ready_workers
       changed_when: false
       failed_when: false
@@ -196,7 +196,7 @@
         all_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
 
     - name: Wait for nodes to become ready (only if not all ready)
-      command: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep Ready | wc -l"
+      shell: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep ' Ready' | wc -l"
       register: ready_workers
       until: ready_workers.stdout | int == groups['kube_node'] | length
       retries: 6
