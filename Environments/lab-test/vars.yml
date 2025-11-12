@@ -23,6 +23,7 @@ vsphere:
 # NETWORK CONFIGURATION
 network:
   prefix: "10.13.103"
+  prefix_length: "24"
   gateway: "10.13.103.1"
   netmask: "255.255.255.0"
   dns_servers:
@@ -110,12 +111,15 @@ nodes:
 # HAPROXY CONFIGURATION
 haproxy:
   maxconn: 4000
+  maxconn_defaults: 3000
   timeout_connect: "10s"
   timeout_client: "1m"
   timeout_server: "1m"
   stats_port: 8080
   ingress_http_nodeport: 30080
   ingress_https_nodeport: 30443
+  health_check_port: 8888         
+  enable_health_check_endpoint: true 
 
  
 # KEEPALIVED CONFIGURATION
