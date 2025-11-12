@@ -80,7 +80,7 @@
         - backup_enabled
         - namespace_backup_enabled
       vars:
-        k8s_backup_root: "{{ backup_path }}"
+        k8s_backup_root: "{{ backup_path }}/k8s-backups"
         k8s_backup_retention_days: "{{ retention_days }}"
         exclude_ns_string: "{{ exclude_namespaces | join(' ') }}"
 
