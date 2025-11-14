@@ -59,6 +59,10 @@ class UnifiedInventoryGenerator:
         """Print error message"""
         print(f"❌ [ERROR] {message}")
     
+    def print_info(self, message: str):
+        """Print info message"""
+        print(f"ℹ️  [INFO] {message}")
+
     def load_environment_config(self) -> Dict:
         """Load environment configuration from vars.yml"""
         vars_file = self.environment_dir / "vars.yml"
@@ -93,50 +97,17 @@ class UnifiedInventoryGenerator:
         
         return vm_names
     
-    def discover_vagrant_ips(self, config: Dict) -> Dict[str, str]:
-        """Discover actual IPs of running Vagrant VMs"""
-        self.print_step("Discovering Vagrant VM IPs...")
+    def discover_vm_ips(self, config: Dict) -> Dict[str, str]:
+        """Discover actual IPs of VMs via SSH (for environments where IPs might change)
+        
+        Note: In production, IPs are typically static and defined in vars.yml.
+        This function is kept for future dynamic discovery needs.
+        """
         discovered_ips = {}
         
-        try:
-            # Check Vagrant status
-            result = subprocess.run(['vagrant', 'status'], 
-                                  cwd=self.project_root, 
-                                  capture_output=True, 
-                                  text=True)
-            
-            if result.returncode != 0:
-                self.print_warning(f"Could not get Vagrant status: {result.stderr}")
-                return discovered_ips
-            
-            # Get VM names from configuration (dynamic)
-            vm_names = self.get_vm_names_from_config(config)
-            if not vm_names:
-                # Fallback to default names if config doesn't have nodes
-                self.print_warning("No VM names found in config, using default names")
-                vm_names = ['master1', 'worker1', 'worker2', 'haproxy1', 'haproxy2']
-            
-            for vm_name in vm_names:
-                try:
-                    ip_result = subprocess.run([
-                        'vagrant', 'ssh', vm_name, '-c', 
-                        "ip addr show eth1 | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1"
-                    ], cwd=self.project_root, capture_output=True, text=True, timeout=10)
-                    
-                    if ip_result.returncode == 0 and ip_result.stdout.strip():
-                        ip = ip_result.stdout.strip()
-                        discovered_ips[vm_name] = ip
-                        self.print_success(f"Discovered {vm_name}: {ip}")
-                    else:
-                        self.print_warning(f"Could not discover IP for {vm_name}")
-                        
-                except subprocess.TimeoutExpired:
-                    self.print_warning(f"Timeout discovering IP for {vm_name}")
-                except Exception as e:
-                    self.print_warning(f"Error discovering IP for {vm_name}: {e}")
-            
-        except Exception as e:
-            self.print_warning(f"Error during VM discovery: {e}")
+        # For production environments with static IPs, skip discovery
+        # IPs are defined in vars.yml and used directly
+        self.print_info("Using static IP configuration from vars.yml")
         
         return discovered_ips
     
@@ -196,7 +167,7 @@ class UnifiedInventoryGenerator:
                     if ip:
                         nodes[node_name] = {
                             'ip': ip,
-                            'user': master.get('user', config.get('ansible', {}).get('user', 'vagrant'))
+                            'user': config.get('ansible', {}).get('user', 'root')
                         }
             
             # Process worker nodes
@@ -211,7 +182,7 @@ class UnifiedInventoryGenerator:
                     if ip:
                         nodes[node_name] = {
                             'ip': ip,
-                            'user': worker.get('user', config.get('ansible', {}).get('user', 'vagrant'))
+                            'user': config.get('ansible', {}).get('user', 'root')
                         }
             
             if not nodes:
@@ -235,16 +206,6 @@ class UnifiedInventoryGenerator:
             self.print_error(f"Failed to generate Kubespray inventory: {e}")
             return False
     
-    def _get_vm_ssh_key_path(self, vm_name: str) -> str:
-        """Get the SSH private key path for a specific VM"""
-        vagrant_key_path = self.project_root / ".vagrant" / "machines" / vm_name / "virtualbox" / "private_key"
-        
-        if vagrant_key_path.exists():
-            return str(vagrant_key_path)
-        else:
-            # Fallback to insecure key with password authentication
-            return "~/.vagrant.d/insecure_private_key"
-    
     def _generate_kubespray_inventory_content(self, nodes: Dict, config: Dict) -> str:
         """Generate Kubespray inventory.ini content"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -263,22 +224,22 @@ class UnifiedInventoryGenerator:
                 worker_hostnames.add(worker['hostname'])
         
         content = f"""# Kubespray Inventory for {self.environment_title} Environment
-# Generated on: {timestamp}
-# DO NOT EDIT MANUALLY - Generated by unified inventory script
+    # Generated on: {timestamp}
+    # DO NOT EDIT MANUALLY - Generated by unified inventory script
 
-[all]
-"""
+    [all]
+    """
         
-        # Add all nodes - use hostname for SSH (system has DNS), IPs for Kubernetes
-        # Get SSH key from vars.yml instead of Vagrant keys
+        # Get SSH key from vars.yml configuration
         ansible_config = config.get('ansible', {})
         ssh_key_path = ansible_config.get('ssh_private_key_file', '~/.ssh/id_rsa')
         
+        # Add all nodes with SSH configuration
         for node_name, node_info in nodes.items():
-            # Use hostname for ansible_host (DNS resolves it)
-            # Keep IPs for Kubernetes networking
+            # Use hostname for ansible_host (DNS/hosts file resolves it)
+            # Keep IPs for Kubernetes internal networking
             content += f'{node_name} ansible_host={node_name} ansible_user={node_info["user"]} ansible_ssh_private_key_file="{ssh_key_path}" ip={node_info["ip"]} access_ip={node_info["ip"]}\n'
-                    
+        
         content += "\n[kube_control_plane]\n"
         # Add all master nodes dynamically
         for node_name in nodes.keys():
@@ -299,31 +260,21 @@ class UnifiedInventoryGenerator:
         
         content += """\n[calico_rr]
 
-[k8s_cluster:children]
-kube_control_plane
-kube_node
-calico_rr
+    [k8s_cluster:children]
+    kube_control_plane
+    kube_node
+    calico_rr
 
-[all:vars]
-# SSH authentication with fallback (individual keys set per host above)
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=yes'
-ansible_ssh_pass={ansible_ssh_pass}
-ansible_become_pass={ansible_become_pass}
-# Try key authentication first, fallback to password
-ansible_ssh_extra_args='-o PreferredAuthentications=publickey,password'
-"""
-        
-        # Get SSH credentials from config (with defaults)
-        ansible_config = config.get('ansible', {})
-        ansible_ssh_pass = ansible_config.get('ssh_pass', 'vagrant')
-        ansible_become_pass = ansible_config.get('become_pass', ansible_ssh_pass)
-        
-        content = content.format(
-            ansible_ssh_pass=ansible_ssh_pass,
-            ansible_become_pass=ansible_become_pass
-        )
+    [all:vars]
+    # SSH authentication using keys (passwordless sudo must be configured on VMs)
+    ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    # Note: Passwordless sudo must be configured on all nodes for automation
+    # Example: sudo visudo -f /etc/sudoers.d/kvenkata
+    #          Add line: kvenkata ALL=(ALL) NOPASSWD: ALL
+    """
         
         return content
+
     
     def _validate_network_configuration(self, config: Dict) -> bool:
         """Validate network configuration for conflicts and consistency"""
@@ -782,25 +733,6 @@ ansible_ssh_extra_args='-o PreferredAuthentications=publickey,password'
             self.print_error(f"Failed to generate HAProxy inventory: {e}")
             return False
     
-    def _get_vagrant_ssh_port(self, vm_name: str) -> Optional[int]:
-        """Get Vagrant SSH port for a VM"""
-        try:
-            result = subprocess.run(
-                ['vagrant', 'ssh-config', vm_name],
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if line.strip().startswith('Port '):
-                        port = int(line.strip().split()[1])
-                        return port
-        except Exception as e:
-            self.print_warning(f"Could not get SSH port for {vm_name}: {e}")
-        return None
-    
     def _generate_haproxy_inventory_content(self, haproxy1_name: str, haproxy1_ip: str, 
                                            keepalived1_priority: int, keepalived1_state: str,
                                            haproxy2_name: str, haproxy2_ip: str,
@@ -809,51 +741,31 @@ ansible_ssh_extra_args='-o PreferredAuthentications=publickey,password'
         """Generate HAProxy inventory.ini content"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Get SSH keys for HAProxy nodes
-        haproxy1_key = self._get_vm_ssh_key_path(haproxy1_name)
-        haproxy2_key = self._get_vm_ssh_key_path(haproxy2_name)
-        
-        # Check if we're in Vagrant environment and get SSH ports
-        haproxy1_port = self._get_vagrant_ssh_port(haproxy1_name)
-        haproxy2_port = self._get_vagrant_ssh_port(haproxy2_name)
-        
-        # Get SSH credentials from config
+
+        # Get SSH configuration from vars.yml
         ansible_config = config.get('ansible', {})
-        ansible_user = ansible_config.get('user', 'vagrant')
-        ansible_ssh_pass = ansible_config.get('ssh_pass', 'vagrant')
-        ansible_become_pass = ansible_config.get('become_pass', ansible_ssh_pass)
+        ansible_user = ansible_config.get('user', 'root')
+        ssh_key_path = ansible_config.get('ssh_private_key_file', '~/.ssh/id_rsa')
+
         
-        # Use Vagrant SSH ports if available (for local development)
-        if haproxy1_port and haproxy2_port:
-            haproxy1_host = f"127.0.0.1"
-            haproxy2_host = f"127.0.0.1"
-            haproxy1_ansible_port = f"ansible_port={haproxy1_port}"
-            haproxy2_ansible_port = f"ansible_port={haproxy2_port}"
-            self.print_success(f"Using Vagrant SSH ports: {haproxy1_name}={haproxy1_port}, {haproxy2_name}={haproxy2_port}")
-        else:
-            # Use hostnames (System has DNS/hosts configured)
-            haproxy1_host = haproxy1_name  # ← CHANGED
-            haproxy2_host = haproxy2_name  # ← CHANGED
-            haproxy1_ansible_port = ""
-            haproxy2_ansible_port = ""
-            self.print_success(f"Using hostnames for SSH: {haproxy1_name}, {haproxy2_name}")
+        haproxy1_host = haproxy1_name  # ← CHANGED
+        haproxy2_host = haproxy2_name  # ← CHANGED
+        haproxy1_ansible_port = ""
+        haproxy2_ansible_port = ""
+        self.print_success(f"Using hostnames for SSH: {haproxy1_name}, {haproxy2_name}")
         
         content = f"""# HAProxy Inventory for {self.environment_title} Environment
 # Generated on: {timestamp}
 # DO NOT EDIT MANUALLY - Generated by unified inventory script
 
 [haproxy]
-{haproxy1_name} ansible_host={haproxy1_host} {haproxy1_ansible_port} keepalived_priority={keepalived1_priority} keepalived_state={keepalived1_state} ansible_ssh_private_key_file="{haproxy1_key}"
-{haproxy2_name} ansible_host={haproxy2_host} {haproxy2_ansible_port} keepalived_priority={keepalived2_priority} keepalived_state={keepalived2_state} ansible_ssh_private_key_file="{haproxy2_key}"
+{haproxy1_name} ansible_host={haproxy1_host} {haproxy1_ansible_port} keepalived_priority={keepalived1_priority} keepalived_state={keepalived1_state} ansible_ssh_private_key_file="{ssh_key_path}"
+{haproxy2_name} ansible_host={haproxy2_host} {haproxy2_ansible_port} keepalived_priority={keepalived2_priority} keepalived_state={keepalived2_state} ansible_ssh_private_key_file="{ssh_key_path}"
 
 [haproxy:vars]
 ansible_user={ansible_user}
-# SSH authentication with fallback (individual keys set per host above)
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=yes'
-ansible_ssh_pass={ansible_ssh_pass}
-ansible_become_pass={ansible_become_pass}
-# Try key authentication first, fallback to password
-ansible_ssh_extra_args='-o PreferredAuthentications=publickey,password'
+# SSH authentication using keys (passwordless sudo must be configured)
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 virtual_ip={virtual_ip}
 environment={self.environment}
 """
@@ -916,7 +828,7 @@ environment={self.environment}
                 return False
             
             # Discover VM IPs (pass config to get VM names dynamically)
-            discovered_ips = self.discover_vagrant_ips(config)
+            discovered_ips = self.discover_vm_ips(config)
             
             # Generate both inventories
             kubespray_success = self.generate_kubespray_inventory(config, discovered_ips)
@@ -952,7 +864,7 @@ def main():
     if args.test:
         # Test mode - just validate
         config = generator.load_environment_config()
-        discovered_ips = generator.discover_vagrant_ips(config)
+        discovered_ips = generator.discover_vm_ips(config)
         generator.display_summary(discovered_ips)
         return 0
     
