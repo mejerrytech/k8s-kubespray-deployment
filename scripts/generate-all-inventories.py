@@ -269,12 +269,16 @@ class UnifiedInventoryGenerator:
 [all]
 """
         
-        # Add all nodes with individual SSH key configuration
-        for node_name, node_info in nodes.items():
-            ssh_key_path = self._get_vm_ssh_key_path(node_name)
-            # Add ip and access_ip to force use of cluster network interface
-            content += f'{node_name} ansible_host={node_info["ip"]} ansible_user={node_info["user"]} ansible_ssh_private_key_file="{ssh_key_path}" ip={node_info["ip"]} access_ip={node_info["ip"]}\n'
+        # Add all nodes - use hostname for SSH (system has DNS), IPs for Kubernetes
+        # Get SSH key from vars.yml instead of Vagrant keys
+        ansible_config = config.get('ansible', {})
+        ssh_key_path = ansible_config.get('ssh_private_key_file', '~/.ssh/id_rsa')
         
+        for node_name, node_info in nodes.items():
+            # Use hostname for ansible_host (DNS resolves it)
+            # Keep IPs for Kubernetes networking
+            content += f'{node_name} ansible_host={node_name} ansible_user={node_info["user"]} ansible_ssh_private_key_file="{ssh_key_path}" ip={node_info["ip"]} access_ip={node_info["ip"]}\n'
+                    
         content += "\n[kube_control_plane]\n"
         # Add all master nodes dynamically
         for node_name in nodes.keys():
@@ -827,12 +831,12 @@ ansible_ssh_extra_args='-o PreferredAuthentications=publickey,password'
             haproxy2_ansible_port = f"ansible_port={haproxy2_port}"
             self.print_success(f"Using Vagrant SSH ports: {haproxy1_name}={haproxy1_port}, {haproxy2_name}={haproxy2_port}")
         else:
-            # Use direct IPs (for production/non-Vagrant environments)
-            haproxy1_host = haproxy1_ip
-            haproxy2_host = haproxy2_ip
+            # Use hostnames (System has DNS/hosts configured)
+            haproxy1_host = haproxy1_name  # ← CHANGED
+            haproxy2_host = haproxy2_name  # ← CHANGED
             haproxy1_ansible_port = ""
             haproxy2_ansible_port = ""
-            self.print_warning("Using direct IPs (Vagrant ports not detected - may fail in Vagrant environment)")
+            self.print_success(f"Using hostnames for SSH: {haproxy1_name}, {haproxy2_name}")
         
         content = f"""# HAProxy Inventory for {self.environment_title} Environment
 # Generated on: {timestamp}
