@@ -34,8 +34,8 @@ network:
   ingress_vip: "10.13.103.232"   
   virtual_ip: "10.13.103.233"
   cni: "calico"
-  service_cidr: "10.246.0.0/24" 
-  pod_cidr: "10.246.0.0/16" 
+  service_cidr: "10.13.104.0/24" 
+  pod_cidr: "10.13.104.0/24" 
   haproxy1_ip: "10.13.103.221"
   haproxy2_ip: "10.13.103.222"
 
@@ -130,7 +130,7 @@ keepalived:
   auth_pass: "supersecret1"   
   check_interval: 2           
 
-  notification_email: "mark.deckert@medimpact.com"   
+  notification_email: "itse@medimpact.com"   
   notification_email_from: "kube-api-proxy@medimpact.com"  
   smtp_server: "mx.medimpact.com"
   smtp_connect_timeout: 30
