@@ -31,10 +31,10 @@ network:
     - "10.13.2.15"     
   domain: "cluster.local"  
   api_vip: "10.13.103.223"       
-  ingress_vip: "10.13.103.223"   
-  virtual_ip: "10.13.103.223"
+  ingress_vip: "10.13.103.232"   
+  virtual_ip: "10.13.103.233"
   cni: "calico"
-  service_cidr: "10.246.0.0/16" 
+  service_cidr: "10.246.0.0/24" 
   pod_cidr: "10.246.0.0/16" 
   haproxy1_ip: "10.13.103.221"
   haproxy2_ip: "10.13.103.222"
@@ -165,7 +165,7 @@ services:
  
 # ANSIBLE CONFIGURATION
 ansible:
-  user: "pv1medsysans2" 
+  user: "kvenkata" 
   ssh_private_key_file: "~/.ssh/id_rsa"  
   ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
   become: true
@@ -174,7 +174,7 @@ ansible:
  
 # SECURITY SETTINGS
 security:
-  ssh_user: "pv1medsysans2"  
+  ssh_user: "kvenkata"  
   ssh_key_path: "~/.ssh/id_rsa"
   cert_validity_days: 365
   enable_rbac: true
