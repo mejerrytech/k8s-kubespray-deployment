@@ -143,15 +143,14 @@
                       SystemdCgroup = true
     
     # ===== NETWORK INTERFACE VALIDATION =====
-    - name: Verify eth1 interface exists (our private network)
-      command: ip addr show eth1
-      changed_when: false
-      register: eth1_check
+    - name: Detect primary network interface
+      set_fact:
+        primary_interface: "{{ ansible_default_ipv4.interface }}"
+      when: ansible_default_ipv4 is defined
     
-    - name: Display eth1 IP address
+    - name: Display detected network interface
       debug:
-        msg: "eth1 IP: {{ ansible_eth1.ipv4.address }}"
-      when: ansible_eth1 is defined
+        msg: "Using interface: {{ primary_interface | default('detection failed') }}"
     
     # ===== FINAL CHECKS =====
     - name: Test DNS resolution
