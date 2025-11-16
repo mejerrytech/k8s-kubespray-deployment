@@ -1,6 +1,6 @@
-# 🚀 Kubernetes Cluster Automation with Kubespray
+# 🚀 Kubernetes Multi-Cluster Automation with Kubespray
 
-A production-ready Kubernetes deployment automation framework built on **Kubespray v2.29.0** with integrated HAProxy load balancing, automated backups, and complete lifecycle management.
+Production-ready Kubernetes deployment automation framework built on **Kubespray v2.29.0** for on-premises infrastructure with integrated HAProxy load balancing, automated backups, and complete lifecycle management.
 
 ---
 
@@ -10,58 +10,86 @@ A production-ready Kubernetes deployment automation framework built on **Kubespr
 - [Prerequisites](#-prerequisites)
 - [Quick Start](#-quick-start)
 - [Project Structure](#-project-structure)
-- [How to Run](#-how-to-run)
 - [Configuration](#-configuration)
-- [Available Commands](#-available-commands)
-- [Deployment Phases](#-deployment-phases)
+- [Deployment](#-deployment)
 - [Access Points](#-access-points)
 - [Troubleshooting](#-troubleshooting)
+- [Additional Resources](#-additional-resources)
 
 ---
 
 ## ✨ Features
 
-- **🏗️ Complete Kubernetes Deployment** - Automated cluster deployment using Kubespray
+- **🏗️ Complete Kubernetes Deployment** - Automated cluster deployment using Kubespray v2.29.0
 - **⚖️ Integrated Load Balancing** - HAProxy with Keepalived for high availability
-- **🔍 Automatic VM Discovery** - Detects actual VM IPs via Vagrant
 - **📋 Unified Inventory Generation** - Single script creates both Kubespray and HAProxy inventories
-- **🎯 Multi-Environment Support** - Lab, Dev, Prod environments
-- **💾 Automated Backups** - etcd and Kubernetes namespace backups
-- **🔧 Maintenance Tasks** - Automated etcd defragmentation
-- **🔐 OIDC Authentication** - Integrated with ADFS
-- **📊 Monitoring Ready** - Metrics Server and Dashboard included
+- **🎯 Multi-Environment Support** - Lab, Dev, and Production environments
+- **💾 Automated Backups** - Scheduled etcd and Kubernetes namespace backups
+- **🔧 Maintenance Tasks** - Automated etcd defragmentation and health checks
+- **🔐 OIDC Authentication** - Integrated ADFS authentication support
+- **📊 Platform Services** - Metrics Server, Kubernetes Dashboard, and NGINX Ingress included
+- **🔄 Multi-Platform Support** - Works on vSphere, AWS EKS, Azure AKS
 
 ---
 
 ## 🔧 Prerequisites
 
-### Required Software
+### Infrastructure Requirements
 
+- **vSphere Environment**: Pre-provisioned VMs with:
+  - CentOS 7 or Rocky Linux 9 / AlmaLinux 9
+  - SSH access configured
+  - Passwordless sudo for deployment user
+  - DNS resolution for all hostnames
+
+- **Network Requirements**:
+  - Static IP addresses for all nodes
+  - Network connectivity between all nodes
+  - Internet access for package downloads (or local mirror)
+  - Reserved VIPs for API server and Ingress
+
+### Node Requirements
+
+**Master Nodes:**
+- 4 CPU cores minimum
+- 8GB RAM minimum
+- 50GB disk space
+
+**Worker Nodes:**
+- 2 CPU cores minimum
+- 4GB RAM minimum
+- 50GB disk space
+
+**HAProxy Nodes:**
+- 2 CPU cores
+- 2GB RAM
+- 20GB disk space
+
+### Control Machine Requirements
+
+**Required Software:**
 ```bash
-# Install VirtualBox (for local VM deployment)
-sudo apt update
-sudo apt install -y virtualbox virtualbox-ext-pack
+# Python 3.9+
+python3 --version
 
-# Install Vagrant
-sudo apt install -y vagrant
+# Ansible 2.15+
+ansible --version
 
-# Install Ansible
-sudo apt install -y ansible
+# Git
+git --version
 
-# Install Python 3 and dependencies
-sudo apt install -y python3 python3-pip
-pip3 install pyyaml
-
-# Install sshpass for password authentication fallback
-sudo apt install -y sshpass
+# SSH client with key-based authentication
+ssh -V
 ```
 
-### System Requirements
+**Install Dependencies:**
+```bash
+# On RHEL/CentOS/Rocky/AlmaLinux
+sudo dnf install -y python3 python3-pip git ansible
 
-- **RAM**: Minimum 8GB (16GB recommended)
-- **Disk Space**: Minimum 50GB free
-- **CPU**: 4+ cores recommended
-- **OS**: Linux (Ubuntu/Debian) or macOS
+# Install Python dependencies
+pip3 install pyyaml
+```
 
 ---
 
@@ -70,284 +98,297 @@ sudo apt install -y sshpass
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd k8s-multi-cluster-automation-feature-kubespray-automation
+git clone https://github.com/mejerrytech/k8s-kubespray-deployment.git
+cd k8s-kubespray-deployment
 ```
 
-### 2. Start Virtual Machines
+### 2. Configure Your Environment
 
 ```bash
-# Start all VMs (haproxy1, haproxy2, master1, worker1, worker2)
-vagrant up
-```
-
-This will create:
-- **2 HAProxy nodes** (haproxy1, haproxy2)
-- **1 Master node** (master1)
-- **2 Worker nodes** (worker1, worker2)
-
-### 3. Deploy the Cluster
-
-```bash
-# Navigate to your environment directory
 cd Environments/lab-test
+cp vars.yml vars.yml.example  # Keep a backup
 
-# Run the deployment script
+# Edit vars.yml with your infrastructure details
+vim vars.yml
+```
+
+**Key configurations to update:**
+- Cluster name
+- Node hostnames and IP addresses
+- Network configuration (VIPs, CIDR ranges)
+- SSH credentials
+- OIDC settings (if enabled)
+
+### 3. Setup SSH Access
+
+Ensure passwordless SSH and sudo access to all nodes:
+
+```bash
+# Test SSH access to all nodes
+ansible all -i Kubespray/inventory/lab-test/inventory.ini -m ping
+
+
+### 4. Deploy the Cluster
+
+```bash
+cd Environments/lab-test
 ./script.sh deploy
 ```
 
-That's it! The script will:
-1. Generate inventories
-2. Deploy Kubernetes cluster
-3. Deploy HAProxy load balancers
-4. Fix worker node configurations
-5. Setup backups and maintenance
-6. Validate the deployment
+The deployment will automatically:
+1. Generate unified inventories
+2. Prepare system (kernel modules, sysctl, packages)
+3. Deploy Kubernetes cluster via Kubespray
+4. Deploy HAProxy load balancers with Keepalived
+5. Configure worker and master nodes
+6. Setup automated backups and maintenance
+7. Validate the deployment
+
+**Typical deployment time:** 20-30 minutes for a complete cluster
 
 ---
 
 ## 📁 Project Structure
 
 ```
-k8s-multi-cluster-automation-feature-kubespray-automation/
-├── Environments/                    # Environment configurations
-│   └── lab-test/                   # Lab-test environment
-│       ├── script.sh               # 🎯 Main deployment script
-│       ├── vars.yml                # Environment-specific variables
-│       ├── main.yml                # Additional configurations
-│       └── README.md               # Environment documentation
+k8s-kubespray-deployment/
+├── Environments/                       # Environment configurations
+│   ├── lab-test/                      # Lab environment
+│   ├── dev/                           # Development environment
+│   └── prod/                          # Production environment
+│       ├── script.sh                  # Main deployment orchestrator
+│       ├── vars.yml                   # Environment-specific configuration
+│       ├── main.yml                   # Additional configurations
+│       └── README.md                  # Environment documentation
 ├── scripts/
-│   └── generate-all-inventories.py  # 🔧 Unified inventory generator
+│   └── generate-all-inventories.py    # Unified inventory generator
 ├── Ansible/
-│   ├── inventory/                  # Generated inventory files
+│   ├── inventory/                     # Generated inventory files
 │   │   └── haproxy_inventory.ini
-│   ├── playbooks/                  # Essential playbooks
-│   │   ├── prepare_kernel_modules.yml   # Kernel module preparation
-│   │   ├── prepare_system.yml           # System preparation
-│   │   ├── deploy_haproxy_keepalived.yml # HAProxy deployment
-│   │   ├── fix_worker_kubelet.yml       # Worker node fixes
-│   │   ├── fix_cgroup_conf_kubelet.yml  # Kubernetes node cgroup fixes
-│   │   ├── setup_backup.yml             # Backup setup
-│   │   ├── setup_maintenance.yml        # Maintenance setup
-│   │   └── validate_cluster.yml         # Cluster validation
-│   └── templates/                  # Jinja2 templates
+│   ├── playbooks/                     # Deployment playbooks
+│   │   ├── prepare_kernel_modules.yml
+│   │   ├── prepare_system.yml
+│   │   ├── deploy_haproxy_keepalived.yml
+│   │   ├── fix_worker_kubelet.yml
+│   │   ├── fix_cgroup_conf_kubelet.yml
+│   │   ├── setup_backup.yml
+│   │   ├── setup_maintenance.yml
+│   │   └── validate_cluster.yml
+│   └── templates/                     # Jinja2 templates
 │       ├── backup-etcd.sh.j2
 │       ├── backup-k8s-namespaces.sh.j2
 │       └── defrag-etcd.sh.j2
-├── Kubespray/                      # 📦 Kubespray v2.29.0
-│   ├── cluster.yml                 # Main Kubespray playbook
-│   └── inventory/                 # Generated Kubespray inventories
+├── Kubespray/                         # Kubespray v2.29.0 (submodule)
+│   ├── cluster.yml
+│   └── inventory/
 │       └── lab-test/
-├── Vagrantfile                    # 🖥️ Local VM definitions
-└── README.md                      # This file
-```
-
----
-
-## 🎯 How to Run
-
-### Option 1: Interactive Menu
-
-```bash
-cd Environments/lab-test
-./script.sh
-```
-
-You'll see an interactive menu:
-```
-🚀 Lab-Test Kubernetes Deployment Options:
-  1) 🏗️  Deploy complete cluster (inventory + Kubespray + HAProxy)
-  2) ⚖️  Deploy HAProxy only (requires existing cluster)
-  3) 📋 Generate inventories only
-  4) ✅ Validate cluster
-  5) 📊 Show status
-  6) 🚪 Exit
-```
-
-### Option 2: Command Line
-
-```bash
-cd Environments/lab-test
-
-# Deploy complete cluster
-./script.sh deploy
-
-# Deploy HAProxy only
-./script.sh haproxy
-
-# Generate inventories only
-./script.sh inventory
-
-# Validate cluster
-./script.sh validate
-
-# Show cluster status
-./script.sh status
+└── README.md
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Environment Configuration
-
-Edit `Environments/lab-test/vars.yml` to customize your cluster:
+### Environment Configuration (`vars.yml`)
 
 ```yaml
-# Cluster name (should match folder name)
-cluster_name: lab-test
+# Basic cluster information
+cluster_name: k8calab2
+environment: lab
+datacenter: WTD
 
 # Network configuration
 network:
-  prefix: "192.168.56"
-  api_vip: "192.168.56.150"
-  ingress_vip: "192.168.56.149"
-  virtual_ip: "192.168.56.148"
+  prefix: "10.13.103"
+  gateway: "10.13.103.1"
+  netmask: "255.255.255.0"
+  dns_servers: ["10.13.2.15"]
+  domain: "medimpact.local"
+  
+  # Virtual IPs
+  api_vip: "10.13.103.223"        # Kubernetes API endpoint
+  ingress_vip: "10.13.103.232"    # Ingress controller
+  virtual_ip: "10.13.103.233"     # Additional VIP
+  
+  # Kubernetes networking
+  cni: "calico"
+  service_cidr: "10.236.0.0/16"
+  pod_cidr: "10.246.0.0/16"
 
-# Node configuration
+# Node definitions
 nodes:
   masters:
-    - hostname: master1
-      ip: "192.168.56.153"
+    - hostname: dv1medk8lab2ma01
+      ip: "10.13.103.224"
+    - hostname: dv1medk8lab2ma02
+      ip: "10.13.103.225"
+    - hostname: dv1medk8lab2ma03
+      ip: "10.13.103.226"
+  
   workers:
-    - hostname: worker1
-      ip: "192.168.56.154"
-    - hostname: worker2
-      ip: "192.168.56.155"
+    - hostname: dv1medk8lab2no01
+      ip: "10.13.103.227"
+    - hostname: dv1medk8lab2no02
+      ip: "10.13.103.228"
+    - hostname: dv1medk8lab2no03
+      ip: "10.13.103.229"
+    - hostname: dv1medk8lab2no04
+      ip: "10.13.103.230"
+    - hostname: dv1medk8lab2no05
+      ip: "10.13.103.231"
+  
   haproxy:
-    - hostname: haproxy1
-      ip: "192.168.56.151"
+    - hostname: dv1medk8lab2proxy1
+      ip: "10.13.103.221"
       keepalived_state: MASTER
       keepalived_priority: 200
-    - hostname: haproxy2
-      ip: "192.168.56.152"
+    - hostname: dv1medk8lab2proxy2
+      ip: "10.13.103.222"
       keepalived_state: BACKUP
       keepalived_priority: 100
 
-# OIDC configuration
+# HAProxy configuration
+haproxy:
+  stats_port: 8404
+  api_backend_port: 6443
+  ingress_http_port: 80
+  ingress_https_port: 443
+
+# SSH configuration
+ansible:
+  user: "kvenkata"
+  ssh_private_key_file: "~/.ssh/id_rsa"
+
+# OIDC authentication (optional)
 oidc:
   enabled: true
-  issuer_url: https://sts.medimpact.com/adfs
-  client_id: 916d15d5-65f1-481e-9b1a-819c17b8414b
+  issuer_url: "https://sts.medimpact.com/adfs"
+  client_id: "916d15d5-65f1-481e-9b1a-819c17b8414b"
 
 # Backup configuration
 backup:
   enabled: true
-  etcd_backup_schedule: "0 4 * * *"
-  namespace_backup_schedule: "0 5 * * *"
-```
+  etcd_backup_schedule: "0 4 * * *"       # 4 AM daily
+  namespace_backup_schedule: "0 5 * * *"  # 5 AM daily
+  retention_days: 7
 
-### VM Configuration
-
-Edit `Vagrantfile` to change VM resources:
-
-```ruby
-config.vm.provider "virtualbox" do |vb|
-  vb.memory = "2048"    # RAM per VM
-  vb.cpus = 2           # CPU cores per VM
-end
+# Platform services
+services:
+  metrics_server: true
+  kubernetes_dashboard: true
+  setup_maintenance: true
 ```
 
 ---
 
-## 📋 Available Commands
+## 🚀 Deployment
 
-### Deployment Commands
-
-| Command | Description |
-|---------|-------------|
-| `./script.sh deploy` | Complete cluster deployment (all phases) |
-| `./script.sh haproxy` | Deploy HAProxy only (requires existing cluster) |
-| `./script.sh inventory` | Generate inventories only |
-| `./script.sh validate` | Validate cluster deployment |
-| `./script.sh status` | Show cluster status |
-
-### Manual Playbook Execution
+### Available Commands
 
 ```bash
-# System preparation
-ansible-playbook -i Kubespray/inventory/lab-test/inventory.ini \
-  -e "@Environments/lab-test/vars.yml" \
-  --become Ansible/playbooks/prepare_kernel_modules.yml
+cd Environments/lab-test
 
-# HAProxy deployment
-ansible-playbook -i Ansible/inventory/haproxy_inventory.ini \
-  -e "@Environments/lab-test/vars.yml" \
-  --become Ansible/playbooks/deploy_haproxy_keepalived.yml
+# Full deployment (recommended)
+./script.sh deploy
+
+# Individual phases
+./script.sh inventory    # Generate inventories only
+./script.sh haproxy      # Deploy HAProxy only
+./script.sh validate     # Validate cluster health
+./script.sh status       # Show cluster status
 ```
 
----
+### Deployment Phases
 
-## 🔄 Deployment Phases
+**Phase 1: System Preparation**
+- Load required kernel modules (`br_netfilter`, `overlay`, `ip_vs`)
+- Configure sysctl parameters for Kubernetes
+- Install required packages
+- Configure container runtime (containerd)
+- Network interface validation
 
-When you run `./script.sh deploy`, it executes these phases:
-
-### **Phase 1: System Preparation**
-- Load kernel modules (`br_netfilter`, `bridge`)
-- System compatibility checks
-- Swap and firewall configuration
-
-### **Phase 2: Kubernetes Cluster Deployment**
-- Deploy Kubernetes via Kubespray
-- Install CoreDNS, Metrics Server, Dashboard
+**Phase 2: Kubernetes Cluster Deployment**
+- Deploy Kubernetes control plane and workers
+- Install CoreDNS for DNS resolution
+- Deploy Metrics Server for resource monitoring
+- Setup Kubernetes Dashboard
 - Configure NGINX Ingress Controller
-- Setup Calico CNI networking
+- Deploy Calico CNI networking
 
-### **Phase 3: HAProxy Load Balancer**
+**Phase 3: HAProxy Load Balancer**
 - Deploy HAProxy on dedicated nodes
 - Configure Keepalived for VIP failover
-- Setup load balancing for API and Ingress
+- Setup load balancing for API server and Ingress
+- Configure health checks
 
-### **Phase 4: Worker Node Fix**
-- Fix kubelet configuration on worker nodes
-- Ensure correct API server endpoint
+**Phase 4: Worker Node Configuration**
+- Fix kubelet configuration for correct API endpoint
+- Ensure proper cgroup driver configuration
 
-### **Phase 5: Kubernetes Node Fix**
-- Fix kubelet configuration on master and worker nodes
-- Ensure correct cgroup configurations applied
+**Phase 5: Cgroup Configuration**
+- Apply cgroup configuration to all nodes
+- Restart kubelet services
 
-### **Phase 6: Backup Setup** (if enabled)
+**Phase 6: Backup Setup** (if enabled)
 - Deploy etcd backup scripts
-- Deploy Kubernetes namespace backup scripts
+- Deploy namespace backup scripts
 - Configure cron jobs
 
-### **Phase 7: Maintenance Setup** (if enabled)
+**Phase 7: Maintenance Setup** (if enabled)
 - Deploy etcd defragmentation scripts
 - Configure maintenance cron jobs
 
-### **Phase 8: Validation**
-- Verify cluster health
-- Check node status
-- Validate services
+**Phase 8: Validation**
+- Verify all nodes are Ready
+- Check pod status across all namespaces
+- Validate VIP accessibility
+- Test API server connectivity
 
 ---
 
 ## 🌐 Access Points
 
-After successful deployment, access your cluster:
+After successful deployment:
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| **Kubernetes API** | `https://192.168.56.150:6443` | Cluster management endpoint |
-| **HAProxy Stats** | `http://192.168.56.150:8404/stats` | Load balancer dashboard |
-| **HTTP Applications** | `http://192.168.56.150` | Web applications via Ingress |
-| **HTTPS Applications** | `https://192.168.56.150` | Secure applications via Ingress |
-| **Kubernetes Dashboard** | Access via `kubectl proxy` | Web UI for cluster management |
+| Service | Endpoint | Description |
+|---------|----------|-------------|
+| **Kubernetes API** | `https://<api_vip>:6443` | Cluster management API |
+| **HAProxy Stats** | `http://<api_vip>:8404/stats` | Load balancer dashboard |
+| **HTTP Ingress** | `http://<ingress_vip>` | HTTP applications |
+| **HTTPS Ingress** | `https://<ingress_vip>` | HTTPS applications |
+| **Kubernetes Dashboard** | Via `kubectl proxy` | Web UI for cluster management |
 
 ### Accessing the Cluster
 
 ```bash
-# Get kubeconfig from master node
-vagrant ssh master1
-sudo cat /etc/kubernetes/admin.conf > ~/.kube/config
+# Copy kubeconfig from first master node
+ssh kvenkata@dv1medk8lab2ma01 "sudo cat /etc/kubernetes/admin.conf" > ~/.kube/config
 
-# Or copy to your local machine
-vagrant ssh master1 -c "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
-export KUBECONFIG=./kubeconfig.yaml
+# Or on the master node
+mkdir -p ~/.kube
+sudo cp /etc/kubernetes/admin.conf ~/.kube/config
+sudo chown $(id -u):$(id -g) ~/.kube/config
 
-# Verify access
+# Verify cluster access
 kubectl get nodes
 kubectl get pods --all-namespaces
+
+# Access Kubernetes Dashboard
+kubectl proxy
+# Then visit: http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+```
+
+### HAProxy Statistics Dashboard
+
+Access HAProxy stats:
+```bash
+# View HAProxy statistics
+curl http://<api_vip>:8404/stats
+
+# Or in browser
+http://<api_vip>:8404/stats
+# Username: admin
+# Password: <from vars.yml>
 ```
 
 ---
@@ -356,160 +397,282 @@ kubectl get pods --all-namespaces
 
 ### Common Issues
 
-#### 1. VMs Not Starting
+#### 1. SSH Connection Failed
 
 ```bash
-# Destroy and recreate VMs
-vagrant destroy -f
-vagrant up
+# Test SSH connectivity
+ssh -i ~/.ssh/id_rsa kvenkata@dv1medk8lab2ma01
+
+# Check SSH configuration
+ansible all -i Kubespray/inventory/lab-test/inventory.ini -m ping
 ```
 
-#### 2. Inventory Generation Fails
+#### 2. Passwordless Sudo Not Configured
 
 ```bash
-# Check Python dependencies
-pip3 install pyyaml
+# Test sudo access
+ssh kvenkata@dv1medk8lab2ma01 "sudo -n whoami"
 
-# Verify vars.yml syntax
-python3 -c "import yaml; yaml.safe_load(open('Environments/lab-test/vars.yml'))"
+# If fails, configure passwordless sudo:
+# On each node:
+sudo visudo -f /etc/sudoers.d/kvenkata
+# Add: kvenkata ALL=(ALL) NOPASSWD: ALL
 ```
 
-#### 3. Deployment Fails at Phase 2 (Kubespray)
+#### 3. Network Interface Not Found
+
+```bash
+# Check available interfaces on nodes
+ansible all -i Kubespray/inventory/lab-test/inventory.ini \
+  -m shell -a "ip addr show"
+
+# The playbook will auto-detect the primary interface
+# No manual configuration needed
+```
+
+#### 4. Kubespray Deployment Fails
 
 ```bash
 # Check cluster status
-./script.sh status
+kubectl get nodes
 
-# View Kubespray logs
-tail -f /tmp/kubespray.log
+# View kubelet logs on a node
+ssh kvenkata@dv1medk8lab2ma01 "sudo journalctl -u kubelet -n 100"
 
-# Retry deployment
+# Retry deployment from checkpoint
+cd Environments/lab-test
 ./script.sh deploy
 ```
 
-#### 4. Worker Nodes Not Ready
+#### 5. Worker Nodes Not Ready
 
 ```bash
-# Run Phase 4 manually
+# Check node status
+kubectl get nodes -o wide
+
+# Manually run worker node fix
 ansible-playbook -i Kubespray/inventory/lab-test/inventory.ini \
   -e "@Environments/lab-test/vars.yml" \
   --become Ansible/playbooks/fix_worker_kubelet.yml
 ```
 
-#### 5. HAProxy VIP Not Accessible
+#### 6. VIP Not Accessible
 
 ```bash
-# Check VIP assignment
-vagrant ssh haproxy1 -c "ip addr show | grep 192.168.56.150"
+# Check VIP assignment on HAProxy nodes
+ssh kvenkata@dv1medk8lab2proxy1 "ip addr show | grep <api_vip>"
 
 # Check Keepalived status
-vagrant ssh haproxy1 -c "systemctl status keepalived"
+ssh kvenkata@dv1medk8lab2proxy1 "sudo systemctl status keepalived"
 
-# View Keepalived config
-vagrant ssh haproxy1 -c "cat /etc/keepalived/keepalived.conf"
+# View HAProxy status
+ssh kvenkata@dv1medk8lab2proxy1 "sudo systemctl status haproxy"
+
+# Check Keepalived logs
+ssh kvenkata@dv1medk8lab2proxy1 "sudo journalctl -u keepalived -n 50"
 ```
 
-#### 6. Connectivity Issues
+#### 7. DNS Resolution Issues
 
 ```bash
-# Test connectivity from master to HAProxy
-vagrant ssh master1 -c "curl -k https://192.168.56.150:6443/healthz"
+# Test DNS from nodes
+ansible all -i Kubespray/inventory/lab-test/inventory.ini \
+  -m shell -a "nslookup registry.k8s.io"
 
-# Check network interfaces
-vagrant ssh haproxy1 -c "ip addr show"
+# Check CoreDNS pods
+kubectl get pods -n kube-system -l k8s-app=kube-dns
 ```
 
 ---
 
 ## 📚 Additional Resources
 
-### Documentation Files
-
-- `VIP_FIX_COMPLETE.md` - VIP functionality fix guide
-- `Environments/lab-test/README.md` - Environment-specific documentation
-
-### Useful Commands
+### Validation Commands
 
 ```bash
-# Check VM status
-vagrant status
+# Check all nodes
+kubectl get nodes -o wide
 
-# SSH into a VM
-vagrant ssh master1
-vagrant ssh haproxy1
+# Check all pods
+kubectl get pods -A
 
-# View cluster logs
-vagrant ssh master1 -c "journalctl -u kubelet -n 50"
+# Check cluster health
+kubectl get componentstatuses
 
-# Check backup status
-vagrant ssh master1 -c "crontab -l"
-vagrant ssh master1 -c "ls -lh /opt/backups/k8s/"
+# View cluster info
+kubectl cluster-info
+
+# Check etcd health (from master node)
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/ssl/etcd/ca.pem \
+  --cert=/etc/kubernetes/ssl/etcd/node-$(hostname).pem \
+  --key=/etc/kubernetes/ssl/etcd/node-$(hostname)-key.pem \
+  endpoint health
+```
+
+### Backup Verification
+
+```bash
+# Check backup cron jobs
+ssh kvenkata@dv1medk8lab2ma01 "crontab -l"
+
+# List backups
+ssh kvenkata@dv1medk8lab2ma01 "ls -lh /opt/backups/k8s/"
+
+# View backup logs
+ssh kvenkata@dv1medk8lab2ma01 "cat /var/log/etcd-backup.log"
+```
+
+### Maintenance Commands
+
+```bash
+# Check etcd defragmentation schedule
+ssh kvenkata@dv1medk8lab2ma01 "crontab -l | grep defrag"
+
+# Manual etcd defragmentation
+ssh kvenkata@dv1medk8lab2ma01 "sudo /usr/local/bin/defrag-etcd.sh"
 ```
 
 ---
 
-## 🎓 Getting Help
+## 🔐 Security Considerations
 
-### Check Logs
+### Authentication
+- SSH key-based authentication required
+- Passwordless sudo configured for automation user
+- OIDC integration available for Kubernetes API authentication
 
+### Network Security
+- All control plane traffic encrypted with TLS
+- etcd traffic encrypted
+- Network policies can be implemented via Calico
+
+### Secrets Management
+- Kubernetes secrets for sensitive data
+- etcd encryption at rest (configurable)
+- SSH keys stored securely on control machine
+
+### Backup Security
+- Backups include sensitive cluster data
+- Store backups in secure location
+- Implement backup retention policies
+
+---
+
+## 📊 Monitoring and Observability
+
+### Built-in Monitoring
+- **Metrics Server**: Resource usage metrics for nodes and pods
+- **Kubernetes Dashboard**: Web UI for cluster monitoring
+- **HAProxy Stats**: Load balancer statistics and health
+
+### Integration Ready
+- Prometheus (configure in Kubespray)
+- Grafana (configure in Kubespray)
+- ELK/EFK stack for logging
+- Custom monitoring solutions
+
+---
+
+## 🔄 Cluster Management
+
+### Scaling the Cluster
+
+**Add Worker Nodes:**
+1. Provision new VMs
+2. Add nodes to `vars.yml`
+3. Regenerate inventories: `./script.sh inventory`
+4. Run Kubespray scale playbook:
 ```bash
-# Ansible playbook logs
-tail -f /tmp/ansible.log
-
-# Kubespray deployment logs
-tail -f /tmp/kubespray.log
-
-# Service logs
-vagrant ssh master1 -c "journalctl -u kubelet"
+cd Kubespray
+ansible-playbook -i inventory/lab-test/inventory.ini scale.yml
 ```
 
-### Validate Configuration
+**Add Master Nodes:**
+1. Follow Kubespray documentation for control plane scaling
+2. Update HAProxy backend configuration
+3. Restart HAProxy services
+
+### Upgrading Kubernetes
 
 ```bash
-# Validate vars.yml
-./script.sh validate
+# Update Kubespray to desired version
+cd Kubespray
+git fetch --tags
+git checkout v2.XX.X
 
-# Check cluster status
-./script.sh status
-
-# Test connectivity
-./script.sh validate
+# Run upgrade playbook
+ansible-playbook -i inventory/lab-test/inventory.ini upgrade-cluster.yml
 ```
 
 ---
 
-## 🔐 Security Notes
+## 📝 Best Practices
 
-- **SSH Keys**: Uses Vagrant's insecure private key for local development
-- **Passwords**: Default passwords are in `vars.yml` (change for production)
-- **OIDC**: Configure OIDC settings in `vars.yml` for production
-- **Certificates**: Managed automatically by Kubespray
+1. **Always backup etcd before major changes**
+   ```bash
+   ssh kvenkata@dv1medk8lab2ma01 "sudo /usr/local/bin/backup-etcd.sh"
+   ```
+
+2. **Test changes in lab environment first**
+   - Deploy to lab-test environment
+   - Validate thoroughly
+   - Then promote to production
+
+3. **Monitor cluster health regularly**
+   ```bash
+   kubectl get nodes
+   kubectl get pods -A
+   kubectl top nodes
+   ```
+
+4. **Keep documentation updated**
+   - Document any custom configurations
+   - Maintain runbooks for common operations
+   - Update vars.yml with infrastructure changes
+
+5. **Regular maintenance**
+   - Review backup logs
+   - Monitor disk space
+   - Check certificate expiration
+   - Review security updates
 
 ---
 
-## 📝 Notes
+## 🆘 Support and Contribution
 
-- **Cluster Name**: Must match the environment folder name (e.g., `lab-test`)
-- **Network Prefix**: Used for interface detection and VIP assignment
-- **VIP Configuration**: Ensure VIPs don't conflict with node IPs
-- **Backup Paths**: Defaults to `/opt/backups/k8s/` (configurable in `vars.yml`)
+### Getting Help
 
----
+1. Check this README and environment-specific documentation
+2. Review deployment logs in `/tmp/`
+3. Check Kubespray documentation: https://kubespray.io/
+4. Review Ansible playbook output for specific errors
 
-## 🚀 Next Steps
+### Contributing
 
-After successful deployment:
-
-1. **Access the Dashboard**: `kubectl proxy` then visit `http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/`
-
-2. **Deploy Applications**: Use the cluster API endpoint or Ingress
-
-3. **Monitor Backups**: Check `/opt/backups/k8s/` on master nodes
-
-4. **Scale Cluster**: Add more nodes by updating `vars.yml` and re-running inventory generation
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Test thoroughly in lab environment
+4. Submit pull request with clear description
 
 ---
 
-**Last Updated**: 2025-11-06  
-**Version**: 1.0.0
+## 📋 Deployment Checklist
 
+Before deploying:
+- [ ] VMs provisioned and accessible
+- [ ] DNS resolution configured
+- [ ] Static IPs assigned
+- [ ] Passwordless sudo configured
+- [ ] SSH key-based authentication working
+- [ ] vars.yml updated with correct values
+- [ ] Network CIDRs don't conflict
+- [ ] VIPs reserved and not in use
+- [ ] Internet access available (or local mirrors configured)
+- [ ] Backup of existing cluster (if applicable)
+
+---
+
+**Repository**: https://github.com/mejerrytech/k8s-kubespray-deployment  
+**Documentation**: See `Environments/<env>/README.md` for environment-specific details  
