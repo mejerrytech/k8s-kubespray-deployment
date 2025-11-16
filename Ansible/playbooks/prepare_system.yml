@@ -75,8 +75,8 @@
           ip_vs_sh
           nf_conntrack
     
-    # ===== SYSCTL SETTINGS (Client's exact config) =====
-    - name: Configure sysctl for Kubernetes (client pattern)
+# ===== SYSCTL SETTINGS (Split into critical and optional) =====
+    - name: Configure critical sysctl for Kubernetes
       sysctl:
         name: "{{ item.key }}"
         value: "{{ item.value }}"
@@ -87,11 +87,23 @@
         - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
         - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
         - { key: 'net.ipv4.ip_forward', value: '1' }
-        - { key: 'net.ipv6.conf.all.disable_ipv6', value: '0' }
-        - { key: 'net.ipv6.conf.default.disable_ipv6', value: '0' }
         - { key: 'fs.inotify.max_user_watches', value: '524288' }
         - { key: 'fs.inotify.max_user_instances', value: '512' }
+
+    - name: Configure optional IPv6 sysctl (may not exist if IPv6 disabled)
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/k8s.conf
+        reload: yes
+      loop:
+        - { key: 'net.ipv6.conf.all.disable_ipv6', value: '0' }
+        - { key: 'net.ipv6.conf.default.disable_ipv6', value: '0' }
+      ignore_errors: yes
     
+
+
     # ===== PACKAGE INSTALLATION =====
     - name: Install required packages (client's list)
       dnf:
