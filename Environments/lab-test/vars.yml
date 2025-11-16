@@ -28,7 +28,7 @@ network:
   netmask: "255.255.255.0"
   dns_servers:
     - "10.13.2.15"
-    - "10.13.2.15"     
+    - "10.15.2.15"     
   domain: "cluster.local"  
   api_vip: "10.13.103.223"       
   ingress_vip: "10.13.103.232"   
