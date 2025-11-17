@@ -170,6 +170,7 @@ ansible:
   ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
   become: true
   become_method: "sudo"
+  python_interpreter: "/usr/bin/python3"
 
  
 # SECURITY SETTINGS
