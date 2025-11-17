@@ -460,6 +460,7 @@ main() {
             "deploy")
                 generate_inventory
                 deploy_cluster
+                validate_cluster
                 ;;
             "validate")
                 validate_cluster
