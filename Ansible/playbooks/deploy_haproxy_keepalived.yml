@@ -45,7 +45,7 @@
           - "HAProxy and Keepalived Deployment"
           - "========================================="
           - "Cluster: {{ cluster_name | upper }}"
-          - "Environment: {{ env | default('') }}"
+          - "Environment: {{ environment | default('') }}"
           - "Target Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})"
           - "Virtual IP: {{ virtual_ip }}"
           - "========================================="

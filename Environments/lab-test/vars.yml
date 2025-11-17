@@ -1,6 +1,6 @@
 # ENVIRONMENT: k8calab2 (California Lab 2)
 cluster_name: k8calab2
-env: dev
+environment: dev
 datacenter: WTD
 
 # CLUSTER CONFIGURATION   
@@ -170,7 +170,6 @@ ansible:
   ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
   become: true
   become_method: "sudo"
-  python_interpreter: "/usr/bin/python3"
 
  
 # SECURITY SETTINGS
