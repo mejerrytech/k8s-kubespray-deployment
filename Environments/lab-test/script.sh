@@ -460,6 +460,7 @@ main() {
             "deploy")
                 generate_inventory
                 deploy_cluster
+                validate_cluster
                 ;;
             "validate")
                 validate_cluster
@@ -522,4 +523,5 @@ main() {
 # Check if script is being sourced or executed
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
+
 fi
