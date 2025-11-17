@@ -256,7 +256,29 @@ deploy_cluster() {
         print_warning "Worker and Master node cgroup configuration fix had issues (cluster may still be functional)"
     fi
 
-    # Step 6: Setup backups (if enabled)
+    # Step 6: Deploy Kubernetes Dashboard (if enabled)
+    dashboard_enabled=$(get_yaml_value "services.deploy_dashboard")
+    if [[ "$dashboard_enabled" == "True" ]] || [[ "$dashboard_enabled" == "true" ]]; then
+        print_step "Phase X: Setting up Kubernetes Dashboard with admin access"
+        
+        ansible-playbook \
+            -i "$INVENTORY_DIR/inventory.ini" \
+            -e "@$VARS_FILE" \
+            -e "cluster_name=${CLUSTER_NAME}" \
+            --become \
+            Ansible/playbooks/deploy_dashboard.yml
+        
+        if [[ $? -eq 0 ]]; then
+            print_success "Dashboard admin setup completed"
+            print_info "Token saved to /root/dashboard-admin-token.txt on first master"
+        else
+            print_warning "Dashboard setup had issues"
+        fi
+    else
+        print_info "Dashboard setup skipped (services.deploy_dashboard: false)"
+    fi
+
+    # Step 7: Setup backups (if enabled)
     backup_enabled=$(get_yaml_value "backup.enabled")
     if [[ "$backup_enabled" == "True" ]] || [[ "$backup_enabled" == "true" ]]; then
         print_step "Phase 5: Setting up automated backups"
@@ -277,7 +299,7 @@ deploy_cluster() {
         print_info "Backup setup skipped (backup.enabled: false)"
     fi
     
-    # Step 7: Setup maintenance (if enabled)
+    # Step 8: Setup maintenance (if enabled)
     maintenance_enabled=$(get_yaml_value "services.setup_maintenance")
     if [[ "$maintenance_enabled" == "True" ]] || [[ "$maintenance_enabled" == "true" ]]; then
         print_step "Phase 6: Setting up maintenance tasks"
@@ -298,7 +320,7 @@ deploy_cluster() {
         print_info "Maintenance setup skipped (services.setup_maintenance: false)"
     fi
     
-    # Step 8: Validate deployment
+    # Step 9: Validate deployment
     print_step "Phase 8: Deployment validation"
     
     ansible-playbook \
