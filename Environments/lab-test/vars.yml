@@ -1,6 +1,6 @@
 # ENVIRONMENT: k8calab2 (California Lab 2)
 cluster_name: k8calab2
-environment: dev
+env: dev
 datacenter: WTD
 
 # CLUSTER CONFIGURATION   

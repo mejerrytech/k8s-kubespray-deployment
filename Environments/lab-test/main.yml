@@ -14,7 +14,7 @@
 
 # Cluster metadata
 cluster_name: "{{ cluster_name }}"
-environment: "{{ environment }}"
+env: "{{ env }}"
 datacenter: "{{ datacenter }}"
 
 # Cluster configuration (from vars.yml)

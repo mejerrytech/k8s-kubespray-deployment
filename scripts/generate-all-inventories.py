@@ -266,6 +266,8 @@ class UnifiedInventoryGenerator:
     calico_rr
 
     [all:vars]
+    # Explicitly set Python interpreter to avoid warnings
+    ansible_python_interpreter=/usr/bin/python3
     # SSH authentication using keys (passwordless sudo must be configured on VMs)
     ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
     # Note: Passwordless sudo must be configured on all nodes for automation
