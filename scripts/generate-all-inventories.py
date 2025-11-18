@@ -238,7 +238,7 @@ class UnifiedInventoryGenerator:
         for node_name, node_info in nodes.items():
             # Use hostname for ansible_host (DNS/hosts file resolves it)
             # Keep IPs for Kubernetes internal networking
-            content += f'{node_name} ansible_host={node_name} ansible_user={node_info["user"]} ansible_ssh_private_key_file="{ssh_key_path}" ip={node_info["ip"]} access_ip={node_info["ip"]}\n'
+            content += f'{node_name} ansible_host={node_name} ansible_user={node_info["user"]} ansible_ssh_private_key_file="{ssh_key_path}" ansible_python_interpreter=/usr/bin/python3 ip={node_info["ip"]} access_ip={node_info["ip"]}\n'
         
         content += "\n[kube_control_plane]\n"
         # Add all master nodes dynamically
@@ -767,7 +767,7 @@ ansible_user={ansible_user}
 # SSH authentication using keys (passwordless sudo must be configured)
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 virtual_ip={virtual_ip}
-environment={self.environment}
+env={self.environment}
 """
         
         return content
@@ -803,7 +803,7 @@ environment={self.environment}
         print("=" * 80)
         
         print(f"Environment: {self.environment_title}")
-        print(f"Discovered VMs: {len(discovered_ips)}")
+        # print(f"Discovered VMs: {len(discovered_ips)}")
         
         if discovered_ips:
             print("\n🔍 Discovered IPs:")
