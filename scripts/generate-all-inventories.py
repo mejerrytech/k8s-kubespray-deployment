@@ -399,17 +399,19 @@ class UnifiedInventoryGenerator:
                 for master_config in masters:
                     if 'ip' in master_config:
                         node_ips.append(master_config['ip'])
+
+        # Note: We do NOT add worker IPs here because etcd only runs on master nodes
         
-        if 'workers' in nodes_config:
-            workers = nodes_config['workers']
-            if isinstance(workers, dict):
-                for worker_config in workers.values():
-                    if 'ip' in worker_config:
-                        node_ips.append(worker_config['ip'])
-            elif isinstance(workers, list):
-                for worker_config in workers:
-                    if 'ip' in worker_config:
-                        node_ips.append(worker_config['ip'])
+        # if 'workers' in nodes_config:
+        #     workers = nodes_config['workers']
+        #     if isinstance(workers, dict):
+        #         for worker_config in workers.values():
+        #             if 'ip' in worker_config:
+        #                 node_ips.append(worker_config['ip'])
+        #     elif isinstance(workers, list):
+        #         for worker_config in workers:
+        #             if 'ip' in worker_config:
+        #                 node_ips.append(worker_config['ip'])
         
         # Get services configuration from vars.yml
         services_config = config.get('services', {})
