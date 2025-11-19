@@ -34,8 +34,8 @@ network:
   ingress_vip: "10.13.103.232"   
   virtual_ip: "10.13.103.233"
   cni: "calico"
-  service_cidr: "10.13.104.0/24" 
-  pod_cidr: "10.13.104.0/24" 
+  service_cidr: "10.234.0.0/24"
+  pod_cidr: "10.244.0.0/24"
   haproxy1_ip: "10.13.103.221"
   haproxy2_ip: "10.13.103.222"
 
