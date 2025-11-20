@@ -535,6 +535,12 @@ class UnifiedInventoryGenerator:
             f.write(f"kube_service_addresses: {k8s_cluster_vars['kube_service_addresses']}\n")
             f.write(f"kube_pods_subnet: {k8s_cluster_vars['kube_pods_subnet']}\n")
             
+            # Add kubeadm preflight error handling if specified in vars.yml
+            if 'kubeadm_ignore_preflight_errors' in config:
+                f.write(f"\n# Kubeadm preflight error handling\n")
+                f.write(f"kubeadm_ignore_preflight_errors: {config['kubeadm_ignore_preflight_errors']}\n")
+
+
             # Add OIDC configuration if enabled
             if k8s_cluster_vars.get('kube_oidc_auth'):
                 f.write("\n# OIDC Authentication Configuration\n")

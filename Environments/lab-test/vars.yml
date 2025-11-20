@@ -38,8 +38,10 @@ network:
   pod_cidr: "10.244.0.0/24"
   haproxy1_ip: "10.13.103.221"
   haproxy2_ip: "10.13.103.222"
+  
+# KUBEADM PRE-FLIGHT ERRORS TO IGNORE
+kubeadm_ignore_preflight_errors: "FileAvailable--etc-kubernetes-kubelet.conf,Port-10250"
 
- 
 # NODE DEFINITIONS
 nodes:
   masters:
