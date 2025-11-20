@@ -153,7 +153,7 @@ generate_inventory() {
 deploy_cluster() {
 
         # Enable logging to file
-    LOG_FILE="/tmp/deployment-$(date +%Y%m%d-%H%M%S).log"
+    LOG_FILE="/tmp/k8s-deployment-$(date +%Y%m%d-%H%M%S).log"
     exec > >(tee -a "$LOG_FILE") 2>&1
     print_info "Deployment log: $LOG_FILE"
 
