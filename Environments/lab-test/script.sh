@@ -152,13 +152,6 @@ generate_inventory() {
 
 deploy_cluster() {
 
-        # Enable logging to file
-    LOG_FILE="/tmp/k8s-deployment-$(date +%Y%m%d-%H%M%S).log"
-    exec > >(tee -a "$LOG_FILE") 2>&1
-    print_info "Deployment log: $LOG_FILE"
-
-
-
     print_step "Deploying ${CLUSTER_NAME} Kubernetes cluster with streamlined approach..."
     
     cd "$PROJECT_ROOT"
@@ -366,9 +359,6 @@ deploy_cluster() {
     echo "  • HTTP Apps: http://${VIP}"
     echo "  • HTTPS Apps: https://${VIP}"
 
-
-    
-    print_success "Deployment log saved: $LOG_FILE"
 }
 
 validate_cluster() {
@@ -492,9 +482,20 @@ main() {
                 deploy_haproxy_only
                 ;;
             "deploy")
+                # Setup logging for deployment
+                LOG_FILE="/tmp/k8s-deployment-$(date +%Y%m%d-%H%M%S).log"
+                exec > >(tee -a "$LOG_FILE") 2>&1
+                print_info "Deployment log: $LOG_FILE"
+                echo ""
+
+                # Run deployment
                 generate_inventory
                 deploy_cluster
                 validate_cluster
+
+                # Log completion message
+                echo ""
+                print_success "Full deployment log saved: $LOG_FILE"
                 ;;
             "validate")
                 validate_cluster
@@ -521,8 +522,19 @@ main() {
         
         case $choice in
             1)
+                # Setup logging for deployment
+                LOG_FILE="/tmp/k8s-deployment-$(date +%Y%m%d-%H%M%S).log"
+                exec > >(tee -a "$LOG_FILE") 2>&1
+                print_info "Deployment log: $LOG_FILE"
+                echo ""
+                
+                # Run deployment
                 generate_inventory
                 deploy_cluster
+                
+                # Log completion message
+                echo ""
+                print_success "Full deployment log saved: $LOG_FILE"
                 ;;
             2)
                 deploy_haproxy_only
