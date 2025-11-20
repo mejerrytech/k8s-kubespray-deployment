@@ -151,6 +151,14 @@ generate_inventory() {
 # ==============================================================================
 
 deploy_cluster() {
+
+        # Enable logging to file
+    LOG_FILE="/tmp/deployment-$(date +%Y%m%d-%H%M%S).log"
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    print_info "Deployment log: $LOG_FILE"
+
+
+
     print_step "Deploying ${CLUSTER_NAME} Kubernetes cluster with streamlined approach..."
     
     cd "$PROJECT_ROOT"
@@ -357,6 +365,10 @@ deploy_cluster() {
     echo "  • HAProxy Stats: http://${VIP}:${STATS_PORT}/stats"
     echo "  • HTTP Apps: http://${VIP}"
     echo "  • HTTPS Apps: https://${VIP}"
+
+
+    
+    print_success "Deployment log saved: $LOG_FILE"
 }
 
 validate_cluster() {
