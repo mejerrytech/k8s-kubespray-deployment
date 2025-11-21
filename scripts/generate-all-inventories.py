@@ -538,7 +538,19 @@ class UnifiedInventoryGenerator:
             # Add kubeadm preflight error handling if specified in vars.yml
             if 'kubeadm_ignore_preflight_errors' in config:
                 f.write(f"\n# Kubeadm preflight error handling\n")
-                f.write(f"kubeadm_ignore_preflight_errors: {config['kubeadm_ignore_preflight_errors']}\n")
+                ignore_errors = config['kubeadm_ignore_preflight_errors']
+                
+                # Check if it's already a list or a string
+                if isinstance(ignore_errors, list):
+                    f.write("kubeadm_ignore_preflight_errors:\n")
+                    for error in ignore_errors:
+                        f.write(f"  - {error}\n")
+                else:
+                    # If it's a string with commas, split it into a list
+                    error_list = [e.strip() for e in ignore_errors.split(',')]
+                    f.write("kubeadm_ignore_preflight_errors:\n")
+                    for error in error_list:
+                        f.write(f"  - {error}\n")
 
 
             # Add OIDC configuration if enabled
