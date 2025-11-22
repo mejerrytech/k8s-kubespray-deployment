@@ -43,6 +43,11 @@ network:
 kubeadm_ignore_preflight_errors:
   - FileAvailable--etc-kubernetes-kubelet.conf
   - Port-10250
+  - Port-10259
+  - Port-10257
+  - FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml
+  - FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml
+  - FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml
 
 # NODE DEFINITIONS
 nodes:
