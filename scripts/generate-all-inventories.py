@@ -352,114 +352,51 @@ class UnifiedInventoryGenerator:
             return False
 
     def _generate_kubespray_group_vars(self, config: Dict):
-        """Generate Kubespray group_vars files with network configuration from vars.yml
-        
-        This function now reads network interface configuration from vars.yml:
-        - network.interface_config.cluster_interface: Network interface to use (default: enp0s8)
-        - network.interface_config.force_cluster_network: Whether to enforce cluster network usage
-        
-        This fixes the worker node join issue where Kubespray might use NAT interface
-        (10.0.2.15) instead of cluster network (192.168.56.x) for API server communication.
-        """
+        """Generate Kubespray group_vars files"""
         group_vars_dir = self.kubespray_inventory_dir / "group_vars"
         
-        # Get network interface configuration from vars.yml
         network_config = config.get('network', {})
-        interface_config = network_config.get('interface_config', {})
-        cluster_interface = interface_config.get('cluster_interface', 'enp0s8')  # Default for VirtualBox
-        force_cluster_network = interface_config.get('force_cluster_network', True)
-        
-        # Get master IP for network configuration (needed throughout)
-        master_ip = None
         nodes_config = config.get('nodes', {})
-        if nodes_config.get('masters'):
-            master_list = nodes_config['masters']
-            if isinstance(master_list, list) and len(master_list) > 0:
-                master_data = master_list[0]
-                if isinstance(master_data, dict) and 'ip' in master_data:
-                    master_ip = master_data['ip']
         
-        # Fallback: use network prefix to calculate default
-        if not master_ip:
-            network_config = config.get('network', {})
-            network_prefix = network_config.get('prefix', '192.168.56')
-            master_ip = f"{network_prefix}.153"  # Default to .153 for first master
-            self.print_warning(f"Using calculated master IP: {master_ip}")
-        
-        # For certificate generation, we need actual IPs, not Ansible templates
-        # Get all node IPs for certificate SAN entries
+        # Get node IPs for certificates
         node_ips = []
         if 'masters' in nodes_config:
             masters = nodes_config['masters']
-            if isinstance(masters, dict):
-                for master_config in masters.values():
-                    if 'ip' in master_config:
-                        node_ips.append(master_config['ip'])
-            elif isinstance(masters, list):
+            if isinstance(masters, list):
                 for master_config in masters:
                     if 'ip' in master_config:
                         node_ips.append(master_config['ip'])
-
-        # Note: We do NOT add worker IPs here because etcd only runs on master nodes
         
-        # if 'workers' in nodes_config:
-        #     workers = nodes_config['workers']
-        #     if isinstance(workers, dict):
-        #         for worker_config in workers.values():
-        #             if 'ip' in worker_config:
-        #                 node_ips.append(worker_config['ip'])
-        #     elif isinstance(workers, list):
-        #         for worker_config in workers:
-        #             if 'ip' in worker_config:
-        #                 node_ips.append(worker_config['ip'])
+        # Get load balancer VIP - DEFINED OUTSIDE if block
+        lb_vip = network_config.get('api_vip') or network_config.get('virtual_ip')
+        if not lb_vip:
+            for master in nodes_config.get('masters', []):
+                if 'ip' in master:
+                    lb_vip = master['ip']
+                    break
+        if not lb_vip:
+            network_prefix = network_config.get('prefix', '192.168.56')
+            lb_vip = f"{network_prefix}.153"
+            self.print_warning(f"Using calculated fallback IP: {lb_vip}")
         
-        # Get services configuration from vars.yml
         services_config = config.get('services', {})
         haproxy_config = config.get('haproxy', {})
         
-        # k8s_cluster.yml with enabled addons - read from vars.yml
         k8s_cluster_vars = {
-            # Core Kubernetes settings - let Kubespray use its default version if not specified
             'cluster_name': config.get('cluster', {}).get('name', f'k8s-{self.environment}'),
-            'kube_network_plugin': network_config.get('cni', 'calico'),  # Use CNI from vars.yml
+            'kube_network_plugin': network_config.get('cni', 'calico'),
             'dns_domain': f'{self.environment}.local',
-            'download_run_once': False,
-            'download_localhost': False,
-            'ansible_become': True,
-            
-            # Network configuration from vars.yml
             'kube_service_addresses': network_config.get('service_cidr', '10.233.0.0/18'),
             'kube_pods_subnet': network_config.get('pod_cidr', '10.233.64.0/18'),
-            
-            # Service enablement from vars.yml (default to True if not specified)
-            # Check both 'deploy_helm' and 'helm_enabled' for backwards compatibility
             'helm_enabled': services_config.get('deploy_helm', services_config.get('helm_enabled', True)),
-            'metrics_server_enabled': services_config.get('deploy_metrics_server', services_config.get('metrics_server_enabled', True)),
-            'ingress_nginx_enabled': services_config.get('deploy_ingress', services_config.get('ingress_enabled', True)),
-            'dashboard_enabled': services_config.get('deploy_dashboard', services_config.get('dashboard_enabled', True)),
-            
-            # DNS settings
-            'dns_mode': 'coredns',
-            'enable_nodelocaldns': False,
-            
-            # RBAC settings  
+            'metrics_server_enabled': services_config.get('deploy_metrics_server', True),
+            'ingress_nginx_enabled': services_config.get('deploy_ingress', True),
+            'dashboard_enabled': services_config.get('deploy_dashboard', True),
             'rbac_enabled': services_config.get('deploy_rbac', True),
-            'authorization_modes': ['Node', 'RBAC'],
-            
-            # Ingress controller settings
-            'ingress_nginx_host_network': False,
-            'ingress_nginx_nodeselector': {},
-            'ingress_nginx_namespace': 'ingress-nginx',
-            'ingress_nginx_insecure_port': 80,
-            'ingress_nginx_secure_port': 443,
-            
-            # Configure ingress with NodePort for HAProxy
-            'ingress_nginx_service_type': 'NodePort',
             'ingress_nginx_nodeport_http': haproxy_config.get('ingress_http_nodeport', 30080),
             'ingress_nginx_nodeport_https': haproxy_config.get('ingress_https_nodeport', 30443),
         }
         
-        # Add OIDC configuration if provided
         oidc_config = config.get('oidc', {})
         if oidc_config.get('enabled', False):
             k8s_cluster_vars.update({
@@ -470,43 +407,10 @@ class UnifiedInventoryGenerator:
                 'kube_oidc_username_prefix': oidc_config.get('username_prefix', 'oidc:'),
                 'kube_oidc_groups_claim': oidc_config.get('groups_claim', 'groups'),
             })
-            if oidc_config.get('groups_prefix'):
-                k8s_cluster_vars['kube_oidc_groups_prefix'] = oidc_config.get('groups_prefix')
-            if oidc_config.get('ca_file'):
-                k8s_cluster_vars['kube_oidc_ca_file'] = oidc_config.get('ca_file')
-        
-        # Add network configuration if force_cluster_network is enabled
-        if force_cluster_network:
-            # Get the master node IP for API server configuration
-            master_ip = None
-            nodes_config = config.get('nodes', {})
-            for master in nodes_config.get('masters', []):
-                if 'ip' in master:
-                    master_ip = master['ip']
-                    break
-            
-            if not master_ip:
-                # Fallback: calculate from network prefix
-                network_config = config.get('network', {})
-                network_prefix = network_config.get('prefix', '192.168.56')
-                master_ip = f"{network_prefix}.153"
-                self.print_warning(f"Using calculated master IP fallback: {master_ip}")
-            
-            k8s_cluster_vars.update({
-                # Network configuration to fix API server endpoint issue
-                # Use actual IP instead of Ansible variables to avoid certificate issues
-                'kube_apiserver_ip': master_ip,
-                'loadbalancer_apiserver': {
-                    'address': master_ip,
-                    'port': 6443
-                }
-            })
         
         with open(group_vars_dir / "k8s_cluster.yml", 'w') as f:
             f.write("# Kubespray cluster configuration\n")
             f.write("# Generated automatically - do not edit manually\n\n")
-            
-            # Write basic configuration
             f.write("ansible_become: true\n")
             f.write("authorization_modes:\n- Node\n- RBAC\n")
             f.write(f"cluster_name: {k8s_cluster_vars['cluster_name']}\n")
@@ -526,34 +430,20 @@ class UnifiedInventoryGenerator:
             f.write("ingress_nginx_nodeselector: {}\n")
             f.write("ingress_nginx_secure_port: 443\n")
             f.write("ingress_nginx_service_type: NodePort\n")
-            f.write(f"kube_network_plugin: {k8s_cluster_vars['kube_network_plugin']}\n")  # Use CNI from vars.yml
-            # Don't specify kube_version - let Kubespray use its default
+            f.write(f"kube_network_plugin: {k8s_cluster_vars['kube_network_plugin']}\n")
             f.write(f"metrics_server_enabled: {str(k8s_cluster_vars['metrics_server_enabled']).lower()}\n")
             f.write(f"rbac_enabled: {str(k8s_cluster_vars['rbac_enabled']).lower()}\n")
-            
-            # Network ranges from vars.yml
             f.write(f"kube_service_addresses: {k8s_cluster_vars['kube_service_addresses']}\n")
             f.write(f"kube_pods_subnet: {k8s_cluster_vars['kube_pods_subnet']}\n")
             
-            # Add kubeadm preflight error handling if specified in vars.yml
             if 'kubeadm_ignore_preflight_errors' in config:
-                f.write(f"\n# Kubeadm preflight error handling\n")
+                f.write("\n# Kubeadm preflight error handling\n")
                 ignore_errors = config['kubeadm_ignore_preflight_errors']
-                
-                # Check if it's already a list or a string
                 if isinstance(ignore_errors, list):
                     f.write("kubeadm_ignore_preflight_errors:\n")
                     for error in ignore_errors:
                         f.write(f"  - {error}\n")
-                else:
-                    # If it's a string with commas, split it into a list
-                    error_list = [e.strip() for e in ignore_errors.split(',')]
-                    f.write("kubeadm_ignore_preflight_errors:\n")
-                    for error in error_list:
-                        f.write(f"  - {error}\n")
-
-
-            # Add OIDC configuration if enabled
+            
             if k8s_cluster_vars.get('kube_oidc_auth'):
                 f.write("\n# OIDC Authentication Configuration\n")
                 f.write("kube_oidc_auth: true\n")
@@ -562,131 +452,54 @@ class UnifiedInventoryGenerator:
                 f.write(f"kube_oidc_username_claim: {k8s_cluster_vars.get('kube_oidc_username_claim', 'username')}\n")
                 f.write(f"kube_oidc_username_prefix: '{k8s_cluster_vars.get('kube_oidc_username_prefix', 'oidc:')}'\n")
                 f.write(f"kube_oidc_groups_claim: {k8s_cluster_vars.get('kube_oidc_groups_claim', 'groups')}\n")
-                if k8s_cluster_vars.get('kube_oidc_groups_prefix'):
-                    f.write(f"kube_oidc_groups_prefix: {k8s_cluster_vars.get('kube_oidc_groups_prefix')}\n")
-                if k8s_cluster_vars.get('kube_oidc_ca_file'):
-                    f.write(f"kube_oidc_ca_file: {k8s_cluster_vars.get('kube_oidc_ca_file')}\n")
             
-            # Add DNS server configuration from vars.yml
             if network_config.get('dns_servers'):
                 f.write("\n# Upstream DNS Servers Configuration\n")
                 f.write("upstream_dns_servers:\n")
                 for dns_server in network_config['dns_servers']:
                     f.write(f'  - "{dns_server}"\n')
             
-            # Add quay.io mirror configuration if provided (fixes connectivity issues)
-            quay_image_repo = config.get('quay_image_repo')
-            if quay_image_repo:
-                f.write("\n# Quay.io Image Repository Configuration\n")
-                f.write(f"# Using mirror instead of quay.io to fix connectivity issues\n")
-                f.write(f"quay_image_repo: \"{quay_image_repo}\"\n")
+            f.write("\n# API Load Balancer Configuration\n")
+            f.write("# All nodes use load balancer VIP for API access\n")
+            f.write("loadbalancer_apiserver:\n")
+            f.write(f"  address: {lb_vip}\n")
+            f.write("  port: 6443\n")
             
-            # Add registry mirror configuration if provided (for connectivity issues)
-            registry_config = config.get('registry', {})
-            if registry_config.get('enabled') and registry_config.get('mirrors'):
-                f.write("\n# Docker Registry Mirror Configuration\n")
-                f.write("docker_registry_mirrors:\n")
-                for mirror in registry_config['mirrors']:
-                    f.write(f'  - "{mirror}"\n')
-                
-                # Also configure containerd registry mirrors
-                f.write("\n# Containerd Registry Mirrors Configuration\n")
-                f.write("containerd_registries_mirrors:\n")
-                f.write("  - prefix: docker.io\n")
-                f.write("    mirrors:\n")
-                for mirror in registry_config['mirrors']:
-                    f.write(f'      - host: {mirror}\n')
-                    f.write("        capabilities:\n")
-                    f.write('          - "pull"\n')
-                    f.write('          - "resolve"\n')
-                    f.write("        skip_verify: false\n")
+            if node_ips:
+                f.write("\n# etcd configuration with actual IPs\n")
+                etcd_addresses_str = ",".join([f"https://{ip}:2379" for ip in node_ips])
+                f.write(f'etcd_access_addresses: "{etcd_addresses_str}"\n')
+                f.write("etcd_cert_alt_names:\n")
+                for ip in node_ips:
+                    f.write(f'  - "{ip}"\n')
+                f.write("etcd_cert_alt_ips:\n")
+                for ip in node_ips:
+                    f.write(f'  - "{ip}"\n')
             
-            # Add network configuration if force_cluster_network is enabled
-            if force_cluster_network:
-                master_ip = k8s_cluster_vars.get("kube_apiserver_ip")
-                if not master_ip:
-                    # Calculate from network prefix
-                    network_config = config.get('network', {})
-                    network_prefix = network_config.get('prefix', '192.168.56')
-                    master_ip = f"{network_prefix}.153"
-                f.write("\n# Network configuration to fix API server endpoint issue\n")
-                f.write("# This prevents the NAT interface (10.0.2.15) from being used\n")
-                f.write(f'kube_apiserver_ip: "{master_ip}"\n')
-                f.write(f'kube_apiserver_bind_address: "{master_ip}"\n')
-                
-                # Add etcd configuration with actual IPs for certificate generation
-                if node_ips:
-                    f.write("\n# etcd configuration with actual IPs for certificate generation\n")
-                    f.write("# This prevents template variables in OpenSSL certificate generation\n")
-                    # etcd_access_addresses must be a comma-separated string (Kubespray uses .split(',') on it)
-                    etcd_addresses_str = ",".join([f"https://{ip}:2379" for ip in node_ips])
-                    f.write(f'etcd_access_addresses: "{etcd_addresses_str}"\n')
-                    # etcd_cert_alt_names and etcd_cert_alt_ips can be lists
-                    f.write("etcd_cert_alt_names:\n")
-                    for ip in node_ips:
-                        f.write(f'  - "{ip}"\n')
-                    f.write("etcd_cert_alt_ips:\n")
-                    for ip in node_ips:
-                        f.write(f'  - "{ip}"\n')
-                
-                # Disable external load balancer to prevent lb-apiserver.kubernetes.local issues
-                f.write("\n# Disable external load balancer configuration\n")
-                f.write("# This prevents timeout issues with lb-apiserver.kubernetes.local\n")
-                f.write("loadbalancer_apiserver_localhost: true\n")
-                f.write("loadbalancer_apiserver_type: localhost\n")
+            f.write("\n# Load balancer configuration\n")
+            f.write("loadbalancer_apiserver_localhost: false\n")
+            f.write("loadbalancer_apiserver_type: haproxy\n")
         
-        # For runtime IP resolution, use Ansible templates that work during playbook execution
-        # For certificate generation, avoid templates and use actual values
-        
-        # all.yml - use a hybrid approach
-        # Get OS from config or default to ubuntu
         bootstrap_os = config.get('cluster', {}).get('bootstrap_os', 'ubuntu')
-        all_vars = {
-            'bootstrap_os': bootstrap_os,
-            'download_cache_dir': '/tmp/kubespray_cache',
-        }
-        
-        # Instead of using problematic Ansible templates, let Kubespray auto-detect
-        # but provide fallbacks for certificate generation
-        if force_cluster_network:
-            all_vars.update({
-                # Don't override ip/access_ip with templates - let Kubespray detect
-                # Instead, ensure certificate generation uses actual IPs
-                'supplementary_addresses_in_ssl_keys': node_ips if node_ips else [master_ip],
-                # Force the cluster network interface to be preferred
-                'override_system_hostname': False,
-                # Remove kube_override_hostname as it causes undefined variable errors
-            })
         
         with open(group_vars_dir / "all.yml", 'w') as f:
             f.write("# Global Kubespray configuration\n")
-            f.write("# Generated automatically - do not edit manually\n\n")
-            
-            # Get OS from config or default
-            bootstrap_os = config.get('cluster', {}).get('bootstrap_os', 'ubuntu')
+            f.write("# Generated automatically\n\n")
             f.write(f"bootstrap_os: {bootstrap_os}\n")
             f.write("download_cache_dir: /tmp/kubespray_cache\n")
-            
-            # Add network configuration if force_cluster_network is enabled
-            if force_cluster_network:
-                f.write("\n# Network configuration to prefer cluster network interface\n")
-                f.write("# Configure for cluster internal communication while preserving internet access\n")
-                if node_ips:
-                    f.write("fallback_ips:\n")
-                    for ip in node_ips:
-                        f.write(f'  - "{ip}"\n')
-                f.write("override_system_hostname: false\n")
-                # Remove the problematic kube_override_hostname that causes undefined variable errors
+            if node_ips:
+                f.write("supplementary_addresses_in_ssl_keys:\n")
+                for ip in node_ips:
+                    f.write(f'  - "{ip}"\n')
+            f.write("override_system_hostname: false\n")
         
-        # Validate generated YAML files
         k8s_cluster_file = group_vars_dir / "k8s_cluster.yml"
         all_file = group_vars_dir / "all.yml"
         
         if self._validate_yaml_syntax(k8s_cluster_file) and self._validate_yaml_syntax(all_file):
             self.print_success("Generated YAML files validated successfully")
         else:
-            self.print_error("YAML validation failed - please check the generated files")
-    
+            self.print_error("YAML validation failed")
     def generate_haproxy_inventory(self, config: Dict, discovered_ips: Dict[str, str]) -> bool:
         """Generate HAProxy inventory"""
         self.print_step("Generating HAProxy inventory...")
