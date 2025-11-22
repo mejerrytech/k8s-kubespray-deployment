@@ -461,9 +461,11 @@ class UnifiedInventoryGenerator:
             
             f.write("\n# API Load Balancer Configuration\n")
             f.write("# All nodes use load balancer VIP for API access\n")
+            f.write(f"\nkubeadm_controlplane_address: {lb_vip}\n")
             f.write("loadbalancer_apiserver:\n")
             f.write(f"  address: {lb_vip}\n")
             f.write("  port: 6443\n")
+
             
             if node_ips:
                 f.write("\n# etcd configuration with actual IPs\n")
@@ -477,7 +479,7 @@ class UnifiedInventoryGenerator:
                     f.write(f'  - "{ip}"\n')
             
             f.write("\n# Load balancer configuration\n")
-            f.write("loadbalancer_apiserver_localhost: true\n")
+            f.write("loadbalancer_apiserver_localhost: false\n")
             f.write(f"kubeadm_control_plane_endpoint: \"{lb_vip}:6443\"\n")
             f.write("nginx_kube_apiserver_port: 6443\n")
         
