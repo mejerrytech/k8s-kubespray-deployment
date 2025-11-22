@@ -477,8 +477,9 @@ class UnifiedInventoryGenerator:
                     f.write(f'  - "{ip}"\n')
             
             f.write("\n# Load balancer configuration\n")
-            f.write("loadbalancer_apiserver_localhost: false\n")
-            f.write("loadbalancer_apiserver_type: haproxy\n")
+            f.write("loadbalancer_apiserver_localhost: true\n")
+            f.write(f"kubeadm_control_plane_endpoint: \"{lb_vip}:6443\"\n")
+            f.write("nginx_kube_apiserver_port: 6443\n")
         
         bootstrap_os = config.get('cluster', {}).get('bootstrap_os', 'ubuntu')
         
