@@ -19,7 +19,9 @@ vsphere:
   network: "vswitch2-med-vlan-33"
   template: "centos7"  
 
- 
+haproxy_maxconn_defaults: 3000
+
+
 # NETWORK CONFIGURATION
 network:
   prefix: "10.13.103"
@@ -144,7 +146,7 @@ keepalived:
   notification_email_from: "kube-api-proxy@medimpact.com"  
   smtp_server: "mx.medimpact.com"
   smtp_connect_timeout: 30
-  interface: "eth0"  
+  interface: "ens192"  
 
 
 # OIDC AUTHENTICATION CONFIGURATION
