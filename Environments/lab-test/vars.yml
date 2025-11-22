@@ -123,6 +123,7 @@ nodes:
 haproxy:
   maxconn: 4000
   maxconn_defaults: 3000
+  haproxy_maxconn_defaults: 3000
   timeout_connect: "10s"
   timeout_client: "1m"
   timeout_server: "1m"
