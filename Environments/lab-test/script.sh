@@ -187,25 +187,10 @@ deploy_cluster() {
     
     print_success "System preparation completed"
     
-    # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
-    print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
-    print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
-    
-    cd "$PROJECT_ROOT/Kubespray"
-    ansible-playbook \
-        -i "inventory/${CLUSTER_NAME}/inventory.ini" \
-        --become \
-        cluster.yml \
-        -e "dns_domain=${CLUSTER_NAME,,}.local"
-    
-    if [[ $? -ne 0 ]]; then
-        print_error "Kubespray cluster deployment failed"
-        exit 1
-    fi
-    
-    print_success "Kubernetes cluster deployment completed"
-    
-    # Step 3: Deploy HAProxy load balancer
+
+
+
+    # Step 2: Deploy HAProxy load balancer
     print_step "Phase 3: HAProxy load balancer deployment"
     cd "$PROJECT_ROOT"
     
@@ -223,6 +208,27 @@ deploy_cluster() {
     
     print_success "HAProxy load balancer deployment completed"
     
+
+
+
+    # Step 3: Deploy Kubernetes with Kubespray (includes all platform services)
+    print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
+    print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
+    
+    cd "$PROJECT_ROOT/Kubespray"
+    ansible-playbook \
+        -i "inventory/${CLUSTER_NAME}/inventory.ini" \
+        --become \
+        cluster.yml \
+        -e "dns_domain=${CLUSTER_NAME,,}.local"
+    
+    if [[ $? -ne 0 ]]; then
+        print_error "Kubespray cluster deployment failed"
+        exit 1
+    fi
+    
+    print_success "Kubernetes cluster deployment completed"
+
     # Step 4: Fix worker node kubelet configuration
     print_step "Phase 4: Fixing worker node kubelet configuration"
     
