@@ -32,9 +32,11 @@ network:
     - "10.13.2.15"
     - "10.15.2.15"     
   domain: "cluster.local"  
+
   api_vip: "10.13.103.223"       
+  virtual_ip: "10.13.103.223" 
   ingress_vip: "10.13.103.232"   
-  virtual_ip: "10.13.103.233"
+  
   cni: "calico"
   service_cidr: "10.234.0.0/24"
   pod_cidr: "10.244.0.0/24"

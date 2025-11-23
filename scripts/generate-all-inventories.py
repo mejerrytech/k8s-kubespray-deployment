@@ -379,6 +379,19 @@ class UnifiedInventoryGenerator:
             lb_vip = f"{network_prefix}.153"
             self.print_warning(f"Using calculated fallback IP: {lb_vip}")
         
+
+        # Get first HAProxy node IP for bootstrap (avoids VIP timing issues)
+        haproxy_nodes = nodes_config.get('haproxy', [])
+        bootstrap_apiserver = lb_vip  # Default to VIP
+        
+        if haproxy_nodes and len(haproxy_nodes) > 0:
+            first_haproxy_node = haproxy_nodes[0]
+            if isinstance(first_haproxy_node, dict) and 'ip' in first_haproxy_node:
+                bootstrap_apiserver = first_haproxy_node['ip']
+                self.print_info(f"Using first HAProxy node IP for bootstrap: {bootstrap_apiserver}")
+        else:
+            self.print_warning(f"No HAProxy nodes found, using VIP for bootstrap: {lb_vip}")
+        
         services_config = config.get('services', {})
         haproxy_config = config.get('haproxy', {})
         
@@ -414,6 +427,7 @@ class UnifiedInventoryGenerator:
             f.write("ansible_become: true\n")
             f.write("authorization_modes:\n- Node\n- RBAC\n")
             f.write(f"cluster_name: {k8s_cluster_vars['cluster_name']}\n")
+            f.write("etcd_deployment_type: host\n")
             f.write(f"dashboard_enabled: {str(k8s_cluster_vars['dashboard_enabled']).lower()}\n")
             f.write(f"dns_domain: {k8s_cluster_vars['dns_domain']}\n")
             f.write("dns_mode: coredns\n")
@@ -460,10 +474,10 @@ class UnifiedInventoryGenerator:
                     f.write(f'  - "{dns_server}"\n')
             
             f.write("\n# API Load Balancer Configuration\n")
-            f.write("# All nodes use load balancer VIP for API access\n")
-            f.write(f"\nkubeadm_controlplane_address: {lb_vip}\n")
+            f.write("# Using first HAProxy node IP for initial bootstrap to avoid VIP timing issues\n")
+            f.write(f"kubeadm_controlplane_address: {bootstrap_apiserver}\n")
             f.write("loadbalancer_apiserver:\n")
-            f.write(f"  address: {lb_vip}\n")
+            f.write(f"  address: {bootstrap_apiserver}\n")
             f.write("  port: 6443\n")
 
             
@@ -537,8 +551,8 @@ class UnifiedInventoryGenerator:
                           network_config.get('haproxy2_ip') or 
                           defaults.get(haproxy2_name))
             
-            virtual_ip = (network_config.get('virtual_ip') or 
-                         network_config.get('api_vip') or
+            virtual_ip = (network_config.get('api_vip') or 
+                         network_config.get('virtual_ip') or
                          defaults.get('virtual_ip'))
             
             if not all([haproxy1_ip, haproxy2_ip, virtual_ip]):
