@@ -424,6 +424,8 @@ class UnifiedInventoryGenerator:
         with open(group_vars_dir / "k8s_cluster.yml", 'w') as f:
             f.write("# Kubespray cluster configuration\n")
             f.write("# Generated automatically - do not edit manually\n\n")
+            f.write("\n# Skip optional cluster role workaround (not needed for K8s 1.33+)\n")
+            f.write("skip_nodes_custom_registration: true\n")
             f.write("ansible_become: true\n")
             f.write("authorization_modes:\n- Node\n- RBAC\n")
             f.write(f"cluster_name: {k8s_cluster_vars['cluster_name']}\n")
@@ -482,7 +484,7 @@ class UnifiedInventoryGenerator:
 
             f.write("\n# API Configuration - Using first master directly for testing\n")
             f.write(f"kubeadm_controlplane_address: {first_master_ip}\n")
-            
+
             # f.write("\n# API Load Balancer Configuration\n")
             # f.write("# Using first HAProxy node IP for initial bootstrap to avoid VIP timing issues\n")
             # f.write(f"kubeadm_controlplane_address: {bootstrap_apiserver}\n")
