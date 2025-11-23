@@ -190,28 +190,28 @@ deploy_cluster() {
 
 
 
-    # Step 2: Deploy HAProxy load balancer
-    print_step "Phase 3: HAProxy load balancer deployment"
-    cd "$PROJECT_ROOT"
+    # # Step 2: Deploy HAProxy load balancer
+    # print_step "Phase 3: HAProxy load balancer deployment"
+    # cd "$PROJECT_ROOT"
     
-    ansible-playbook \
-        -i "Ansible/inventory/haproxy_inventory.ini" \
-        -e "@$VARS_FILE" \
-        -e "cluster_name=${CLUSTER_NAME}" \
-        --become \
-        Ansible/playbooks/deploy_haproxy_keepalived.yml
+    # ansible-playbook \
+    #     -i "Ansible/inventory/haproxy_inventory.ini" \
+    #     -e "@$VARS_FILE" \
+    #     -e "cluster_name=${CLUSTER_NAME}" \
+    #     --become \
+    #     Ansible/playbooks/deploy_haproxy_keepalived.yml
     
-    if [[ $? -ne 0 ]]; then
-        print_error "HAProxy deployment failed"
-        exit 1
-    fi
+    # if [[ $? -ne 0 ]]; then
+    #     print_error "HAProxy deployment failed"
+    #     exit 1
+    # fi
     
-    print_success "HAProxy load balancer deployment completed"
+    # print_success "HAProxy load balancer deployment completed"
     
 
 
 
-    # Step 3: Deploy Kubernetes with Kubespray (includes all platform services)
+    # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
     print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
     print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
     
@@ -228,6 +228,25 @@ deploy_cluster() {
     fi
     
     print_success "Kubernetes cluster deployment completed"
+
+    # Step 3: Deploy HAProxy load balancer
+    print_step "Phase 3: HAProxy load balancer deployment"
+    cd "$PROJECT_ROOT"
+    
+    ansible-playbook \
+        -i "Ansible/inventory/haproxy_inventory.ini" \
+        -e "@$VARS_FILE" \
+        -e "cluster_name=${CLUSTER_NAME}" \
+        --become \
+        Ansible/playbooks/deploy_haproxy_keepalived.yml
+    
+    if [[ $? -ne 0 ]]; then
+        print_error "HAProxy deployment failed"
+        exit 1
+    fi
+    
+    print_success "HAProxy load balancer deployment completed"
+
 
     # Step 4: Fix worker node kubelet configuration
     print_step "Phase 4: Fixing worker node kubelet configuration"

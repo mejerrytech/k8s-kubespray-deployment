@@ -34,7 +34,7 @@ network:
   domain: "cluster.local"  
 
   api_vip: "10.13.103.223"       
-  virtual_ip: "10.13.103.223" 
+  virtual_ip: "10.13.103.223" # was "10.13.103.233"
   ingress_vip: "10.13.103.232"   
   
   cni: "calico"
@@ -49,6 +49,7 @@ kubeadm_ignore_preflight_errors:
   - Port-10250
   - Port-10259
   - Port-10257
+  - Port-6443
   - FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml
   - FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml
   - FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml

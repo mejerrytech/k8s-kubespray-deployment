@@ -473,12 +473,22 @@ class UnifiedInventoryGenerator:
                 for dns_server in network_config['dns_servers']:
                     f.write(f'  - "{dns_server}"\n')
             
-            f.write("\n# API Load Balancer Configuration\n")
-            f.write("# Using first HAProxy node IP for initial bootstrap to avoid VIP timing issues\n")
-            f.write(f"kubeadm_controlplane_address: {bootstrap_apiserver}\n")
-            f.write("loadbalancer_apiserver:\n")
-            f.write(f"  address: {bootstrap_apiserver}\n")
-            f.write("  port: 6443\n")
+
+
+            # Get first master IP for testing WITHOUT load balancer
+            first_master_ip = None
+            if node_ips and len(node_ips) > 0:
+                first_master_ip = node_ips[0]
+
+            f.write("\n# API Configuration - Using first master directly for testing\n")
+            f.write(f"kubeadm_controlplane_address: {first_master_ip}\n")
+            
+            # f.write("\n# API Load Balancer Configuration\n")
+            # f.write("# Using first HAProxy node IP for initial bootstrap to avoid VIP timing issues\n")
+            # f.write(f"kubeadm_controlplane_address: {bootstrap_apiserver}\n")
+            # f.write("loadbalancer_apiserver:\n")
+            # f.write(f"  address: {bootstrap_apiserver}\n")
+            # f.write("  port: 6443\n")
 
             
             if node_ips:
@@ -494,7 +504,7 @@ class UnifiedInventoryGenerator:
             
             f.write("\n# Load balancer configuration\n")
             f.write("loadbalancer_apiserver_localhost: false\n")
-            f.write(f"kubeadm_control_plane_endpoint: \"{lb_vip}:6443\"\n")
+            f.write(f"kubeadm_control_plane_endpoint: \"{first_master_ip}:6443\"\n")
             f.write("nginx_kube_apiserver_port: 6443\n")
         
         bootstrap_os = config.get('cluster', {}).get('bootstrap_os', 'ubuntu')

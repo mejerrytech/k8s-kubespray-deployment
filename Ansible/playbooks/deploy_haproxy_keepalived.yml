@@ -345,7 +345,7 @@
       retries: 5
       delay: 3
       ignore_errors: true
-      when: haproxy_enable_health_endpoint
+      when: haproxy_enable_health_check_endpoint | default(false)
 
     - name: Check virtual IP assignment
       shell: ip addr show {{ ansible_default_ipv4.interface }} | grep "{{ virtual_ip }}"
