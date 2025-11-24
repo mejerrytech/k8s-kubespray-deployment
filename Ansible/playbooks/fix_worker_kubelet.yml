@@ -214,7 +214,9 @@
     - name: Check if all workers are ready
       set_fact:
         all_workers_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
-      when: ready_workers is defined
+      when: 
+        - ready_workers is defined
+        - ready_workers.stdout is defined
 
     - name: Display final status
       debug:
@@ -225,8 +227,11 @@
           - "Ready workers: {{ ready_workers.stdout | default('N/A') }}/{{ groups['kube_node'] | length }}"
           - "Status: {{ 'All workers ready' if (all_workers_ready | default(false)) else 'Some workers may not be ready yet' }}"
           - ""
+          - "{% if node_status is defined and node_status.stdout_lines is defined %}"
           - "Node Status:"
-          - "{{ node_status.stdout_lines | default(['Unable to get node status']) }}"
+          - "{{ node_status.stdout_lines | join('\\n') }}"
+          - "{% else %}"
+          - "Node Status: Unable to get node status"
+          - "{% endif %}"
           - "========================================="
-      when: ready_workers is defined or node_status is defined
 
