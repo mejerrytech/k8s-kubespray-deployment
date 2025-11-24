@@ -36,7 +36,7 @@
         api_vip: "{{ api_vip | default(virtual_ip | default('')) }}"
 
     - name: Get master node IP from cluster info
-      command: "{{ kubectl_bin }} cluster-info"
+      command: "{{ kubectl_bin }} cluster-info --kubeconfig=/etc/kubernetes/admin.conf"
       register: cluster_info
       changed_when: false
       failed_when: false
