@@ -148,6 +148,41 @@ The deployment will automatically:
 
 ---
 
+### 5. Cluster Cleanup (Add This Section)
+
+⚠️ **DANGER: Completely destroys the cluster - use with extreme caution!**
+```bash
+cd Environments/lab-test
+./cleanup.sh
+```
+
+**What it does:**
+- Stops all Kubernetes services (kubelet, etcd, containerd, docker)
+- Removes ALL Kubernetes data and configuration
+- Deletes ALL pods, deployments, and persistent volumes
+- Resets all nodes to pre-Kubernetes state
+- Cleans iptables and networking rules
+
+**Safety Features:**
+- **Triple confirmation required:**
+  1. Type exact cluster name (e.g., `lab-test`)
+  2. Type `YES` in capital letters
+  3. Type `DELETE` to proceed
+- Clear danger warnings throughout
+- Timestamped log files: `/tmp/k8s-cleanup-{cluster-name}-YYYYMMDD-HHMMSS.log`
+- Cannot be undone - data loss is permanent!
+
+**When to use:**
+- Before redeploying a failed cluster
+- To completely remove Kubernetes from nodes
+- When switching between different cluster configurations
+- **Never on production without proper backups!**
+
+---
+
+
+
+
 ## 📁 Project Structure
 
 ```
@@ -296,6 +331,12 @@ cd Environments/lab-test
 ./script.sh haproxy      # Deploy HAProxy only
 ./script.sh validate     # Validate cluster health
 ./script.sh status       # Show cluster status
+
+# Cluster cleanup (separate script for safety)
+./cleanup.sh            # Complete cluster destruction with triple confirmation
+```
+
+⚠️ **Note:** Cleanup is intentionally separated from `script.sh` to prevent accidental deletion. See [Cluster Cleanup](#5-cluster-cleanup) section for details.
 ```
 
 ### Deployment Phases
@@ -483,6 +524,40 @@ ansible all -i Kubespray/inventory/lab-test/inventory.ini \
 kubectl get pods -n kube-system -l k8s-app=kube-dns
 ```
 
+
+#### 8. Deployment Fails Midway (Add This)
+
+**Symptom:** Deployment stops with errors, cluster partially deployed
+
+**Cause:** Previous deployment attempt left partial state, or workers joined old cluster
+
+**Solution:**
+```bash
+# Clean everything and start fresh
+cd Environments/lab-test
+./cleanup.sh              # Triple confirmation required
+./script.sh deploy
+```
+
+**Important:** The cleanup script requires:
+1. Typing `YES` in capitals
+
+
+This prevents accidental deletion during troubleshooting.
+
+#### 9. "Node Already Joined" Errors (Add This)
+
+**Symptom:** Workers fail to join with "already part of cluster" error
+
+**Cause:** Nodes retain state from previous deployment
+
+**Solution:**
+```bash
+# Cleanup removes all previous cluster state
+./cleanup.sh
+./script.sh deploy
+```
+
 ---
 
 ## 📚 Additional Resources
@@ -614,24 +689,37 @@ ansible-playbook -i inventory/lab-test/inventory.ini upgrade-cluster.yml
    ssh kvenkata@dv1medk8lab2ma01 "sudo /usr/local/bin/backup-etcd.sh"
    ```
 
-2. **Test changes in lab environment first**
+2. **Use cleanup script for clean redeployments** (Add This)
+```bash
+   # Before major configuration changes or after failed deployments
+   cd Environments/lab-test
+   ./cleanup.sh    # Triple confirmation prevents accidents
+   ./script.sh deploy
+```
+   
+   **When NOT to cleanup:**
+   - Minor configuration updates
+   - HAProxy-only changes
+   - Adding worker nodes (use Kubespray scale instead)
+
+3. **Test changes in lab environment first**
    - Deploy to lab-test environment
    - Validate thoroughly
    - Then promote to production
 
-3. **Monitor cluster health regularly**
+4. **Monitor cluster health regularly**
    ```bash
    kubectl get nodes
    kubectl get pods -A
    kubectl top nodes
    ```
 
-4. **Keep documentation updated**
+5. **Keep documentation updated**
    - Document any custom configurations
    - Maintain runbooks for common operations
    - Update vars.yml with infrastructure changes
 
-5. **Regular maintenance**
+6. **Regular maintenance**
    - Review backup logs
    - Monitor disk space
    - Check certificate expiration
@@ -671,6 +759,15 @@ Before deploying:
 - [ ] VIPs reserved and not in use
 - [ ] Internet access available (or local mirrors configured)
 - [ ] Backup of existing cluster (if applicable)
+- [ ] If redeploying: Run ./cleanup.sh first (Add This Line)
+
+Before cleanup (Production):  (Add This Section)
+- [ ] ⚠️ All stakeholders notified
+- [ ] ⚠️ Recent backups verified
+- [ ] ⚠️ Runbooks and documentation reviewed
+- [ ] ⚠️ Correct cluster name verified
+- [ ] ⚠️ Impact assessment completed
+- [ ] ⚠️ Rollback plan documented
 
 ---
 
