@@ -1,14 +1,8 @@
 ---
-# ==============================================================================
-# POST-DEPLOYMENT MASTER AND NODE CGROUP FIX PLAYBOOK
-# ==============================================================================
-# Automatically fixes all kubernetes servers kubelet configuration to add cgroup configurations
-# This playbook updates all nodes dynamically.
-# ==============================================================================
-
-- name: Fix Worker Node Kubelet Configuration
+- name: Fix Kubelet Cgroup Configuration
   hosts: k8s_cluster
   become: true
+  serial: 1                        # ← Process one node at a time
   gather_facts: true
   vars:
     kubelet_service_path: /etc/systemd/system/kubelet.service
@@ -56,10 +50,34 @@
 
     - name: Wait for kubelet to stabilize
       pause:
-        seconds: 5
+        seconds: 10
       when: kubelet_service_file_stat.stat.exists
 
-- name: Verify Worker and Master Nodes
+    # ============================================
+    # CHECK THIS NODE AFTER ITS RESTART
+    # ============================================
+    - name: Wait for this node to become Ready
+      shell: kubectl get node {{ inventory_hostname }} --no-headers --kubeconfig=/etc/kubernetes/admin.conf | awk '{print $2}'
+      register: node_status
+      until: node_status.stdout == "Ready"
+      retries: 12
+      delay: 5
+      delegate_to: "{{ groups['kube_control_plane'][0] }}"
+      when: kubelet_service_file_stat.stat.exists
+      changed_when: false
+      failed_when: false
+
+    - name: Display node status after restart
+      debug:
+        msg: "Node {{ inventory_hostname }} status: {{ node_status.stdout | default('Unknown') }}"
+      when: 
+        - kubelet_service_file_stat.stat.exists
+        - node_status is defined
+
+# ============================================
+# FINAL VERIFICATION (ALL NODES)
+# ============================================
+- name: Verify All Nodes
   hosts: kube_control_plane[0]
   become: true
   gather_facts: false
@@ -69,7 +87,7 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
 
   tasks:
-    - name: Get current worker and master node status
+    - name: Get all nodes status
       shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
       register: ready_nodes
       changed_when: false
@@ -78,28 +96,6 @@
     - name: Debug ready nodes count
       debug:
         msg: "Ready nodes: {{ ready_nodes.stdout | default('N/A') }}/{{ groups['k8s_cluster'] | length }}"
-
-    - name: Check if all nodes are already ready
-      set_fact:
-        all_ready: "{{ ready_nodes.stdout | int == groups['k8s_cluster'] | length }}"
-      when: 
-        - ready_nodes is defined
-        - ready_nodes.stdout is defined
-
-    - name: Wait for nodes to become ready (only if not all ready)
-      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
-      register: ready_nodes
-      until: ready_nodes.stdout | int == groups['k8s_cluster'] | length
-      retries: 6
-      delay: 5
-      changed_when: false
-      failed_when: false
-      when: not all_ready | default(false) | bool
-
-    - name: Debug wait result
-      debug:
-        msg: "Ready nodes after wait: {{ ready_nodes.stdout | default('N/A') }}"
-      when: not all_ready | default(false) | bool
 
     - name: Get final node status
       command: "{{ kubectl_bin }} get nodes -o wide --kubeconfig=/etc/kubernetes/admin.conf"
@@ -125,15 +121,16 @@
       debug:
         msg:
           - "========================================="
-          - "Worker and Master Node CGroup Fix Complete"
+          - "Cgroup Configuration Complete"
           - "========================================="
           - "Ready Nodes: {{ ready_nodes.stdout | default('N/A') }}/{{ groups['k8s_cluster'] | length }}"
           - "Status: {{ 'All nodes ready' if (all_nodes_ready | default(false)) else 'Some nodes may not be ready yet' }}"
           - ""
-          - "{% if node_status is defined and node_status.stdout_lines is defined %}"
-          - "Node Status:"
-          - "{{ node_status.stdout_lines | join('\\n') }}"
-          - "{% else %}"
-          - "Node Status: Unable to get node status"
-          - "{% endif %}"
           - "========================================="
+      
+    - name: Display node details
+      debug:
+        msg: "{{ node_status.stdout_lines }}"
+      when: 
+        - node_status is defined
+        - node_status.stdout_lines is defined
