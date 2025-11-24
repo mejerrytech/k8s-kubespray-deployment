@@ -186,17 +186,21 @@
 
   tasks:
     - name: Get current worker node status
-      shell: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep ' Ready' | wc -l"
+      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | grep -v 'control-plane' | grep ' Ready' | wc -l"
       register: ready_workers
       changed_when: false
       failed_when: false
+    
+    - name: Debug ready workers count
+      debug:
+        msg: "Ready workers: {{ ready_workers.stdout | default('N/A') }}"
 
     - name: Check if all workers are already ready
       set_fact:
         all_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
 
     - name: Wait for nodes to become ready (only if not all ready)
-      shell: "{{ kubectl_bin }} get nodes --no-headers | grep -v 'control-plane' | grep ' Ready' | wc -l"
+      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | grep -v 'control-plane' | grep ' Ready' | wc -l"
       register: ready_workers
       until: ready_workers.stdout | int == groups['kube_node'] | length
       retries: 6
@@ -205,12 +209,20 @@
       failed_when: false
       when: not all_ready | default(false) | bool
 
+    - name: Debug wait result
+      debug:
+        msg: "Ready workers after wait: {{ ready_workers.stdout | default('N/A') }}"
+      when: not all_ready | default(false) | bool
+
     - name: Get final node status
-      command: "{{ kubectl_bin }} get nodes -o wide"
+      command: "{{ kubectl_bin }} get nodes -o wide --kubeconfig=/etc/kubernetes/admin.conf"
       register: node_status
       changed_when: false
       failed_when: false
 
+    - name: Debug final node status
+      debug:
+        msg: "{{ node_status.stdout_lines | default(['Unable to get node status']) }}"
     - name: Check if all workers are ready
       set_fact:
         all_workers_ready: "{{ ready_workers.stdout | int == groups['kube_node'] | length }}"
