@@ -210,6 +210,22 @@ deploy_cluster() {
     
 
 
+    # Step 1.5: Fix Kubespray module before deployment
+    print_step "Fixing Kubespray kube module..."
+
+    cd "$PROJECT_ROOT/Kubespray/library"
+
+    # Remove any existing kube.py (file or symlink)
+    rm -f kube.py
+
+    # Create symlink to the module
+    ln -sf ../plugins/modules/kube.py kube.py
+
+    print_success "Kubespray symlink to |  /plugins/modules/kube.py  |  created"
+    echo ""
+
+
+
 
     # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
     print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
