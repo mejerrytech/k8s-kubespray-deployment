@@ -1,4 +1,56 @@
 ---
+# ==============================================================================
+# PRE-CLEANUP VERIFICATION
+# ==============================================================================
+- name: Pre-Cleanup Verification
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Display pre-cleanup header
+      debug:
+        msg:
+          - "========================================="
+          - "PRE-CLEANUP VERIFICATION"
+          - "========================================="
+          - "Checking current state of {{ inventory_hostname }}"
+      run_once: false
+
+    - name: Check for running Kubernetes processes
+      shell: ps aux | grep -E 'kube|etcd' | grep -v grep | wc -l
+      register: pre_k8s_processes
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing Kubernetes directories
+      stat:
+        path: "{{ item }}"
+      register: pre_k8s_dirs
+      loop:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+      failed_when: false
+
+    - name: Check if critical ports are in use
+      shell: netstat -tuln | grep -E ':(6443|10250|2379|2380|10251|10252)' | wc -l
+      register: pre_ports_in_use
+      failed_when: false
+      changed_when: false
+
+    - name: Display pre-cleanup findings
+      debug:
+        msg:
+          - "Node: {{ inventory_hostname }}"
+          - "K8s processes running: {{ pre_k8s_processes.stdout }}"
+          - "K8s directories exist: {{ pre_k8s_dirs.results | selectattr('stat.exists') | list | length }}"
+          - "Critical ports in use: {{ pre_ports_in_use.stdout }}"
+          - "Status: {{ 'K8s installed' if (pre_k8s_processes.stdout | int > 0) else 'Already clean' }}"
+
+# ==============================================================================
+# MAIN CLEANUP
+# ==============================================================================
 - name: Clean up existing Kubernetes cluster
   hosts: all
   become: true
@@ -103,4 +155,110 @@
 
     - name: Print cleanup status
       debug:
-        msg: "Node {{ inventory_hostname }} cleaned successfully"
+        msg: "Node {{ inventory_hostname }} cleanup completed"
+
+# ==============================================================================
+# POST-CLEANUP VERIFICATION
+# ==============================================================================
+- name: Post-Cleanup Verification
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Display post-cleanup header
+      debug:
+        msg:
+          - "========================================="
+          - "POST-CLEANUP VERIFICATION"
+          - "========================================="
+          - "Verifying cleanup on {{ inventory_hostname }}"
+      run_once: false
+
+    - name: Check for remaining Kubernetes processes
+      shell: ps aux | grep -E 'kube|etcd' | grep -v grep
+      register: post_k8s_processes
+      failed_when: false
+      changed_when: false
+
+    - name: Check if Kubernetes directories still exist
+      stat:
+        path: "{{ item }}"
+      register: post_k8s_dirs
+      loop:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+        - /etc/cni
+      failed_when: false
+
+    - name: Check if Kubernetes binaries still exist
+      stat:
+        path: "{{ item }}"
+      register: post_k8s_bins
+      loop:
+        - /usr/local/bin/kubectl
+        - /usr/local/bin/kubeadm
+        - /usr/local/bin/kubelet
+      failed_when: false
+
+    - name: Check if critical ports are now free
+      wait_for:
+        port: "{{ item }}"
+        state: stopped
+        timeout: 2
+      loop:
+        - 6443
+        - 10250
+        - 2379
+        - 2380
+      register: post_port_check
+      failed_when: false
+      ignore_errors: yes
+
+    - name: Verify containerd is running
+      systemd:
+        name: containerd
+      register: containerd_status
+      failed_when: false
+
+    - name: Calculate cleanup success
+      set_fact:
+        processes_clean: "{{ post_k8s_processes.stdout == '' }}"
+        dirs_clean: "{{ post_k8s_dirs.results | selectattr('stat.exists') | list | length == 0 }}"
+        bins_clean: "{{ post_k8s_bins.results | selectattr('stat.exists') | list | length == 0 }}"
+        containerd_running: "{{ containerd_status.status.ActiveState == 'active' }}"
+        node_ready: "{{ (post_k8s_processes.stdout == '') and (post_k8s_dirs.results | selectattr('stat.exists') | list | length == 0) }}"
+
+    - name: Display verification results
+      debug:
+        msg:
+          - "{{ '✅' if node_ready else '❌' }} Node: {{ inventory_hostname }}"
+          - "  K8s processes: {{ '✅ None running' if processes_clean else '❌ Still running' }}"
+          - "  K8s directories: {{ '✅ All removed' if dirs_clean else '❌ Some remain' }}"
+          - "  K8s binaries: {{ '✅ All removed' if bins_clean else '❌ Some remain' }}"
+          - "  Containerd: {{ '✅ Running' if containerd_running else '❌ Not running' }}"
+          - "  Status: {{ '✅ READY FOR DEPLOYMENT' if node_ready else '⚠️ CLEANUP INCOMPLETE' }}"
+
+# ==============================================================================
+# FINAL SUMMARY
+# ==============================================================================
+- name: Cleanup Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Display final summary
+      debug:
+        msg:
+          - "========================================="
+          - "CLEANUP VERIFICATION COMPLETE"
+          - "========================================="
+          - "Review each node's status above"
+          - "All nodes should show: ✅ READY FOR DEPLOYMENT"
+          - ""
+          - "If any node shows ⚠️ CLEANUP INCOMPLETE:"
+          - "  1. Review the specific failures above"
+          - "  2. Manually verify the node"
+          - "  3. Re-run cleanup if needed"
+          - "========================================="
