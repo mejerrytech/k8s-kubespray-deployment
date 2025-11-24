@@ -481,38 +481,6 @@ deploy_haproxy_only() {
     fi
 }
 
-# ==============================================================================
-# CLEANUP FUNCTION
-# ==============================================================================
-
-cleanup_cluster() {
-    print_step "Cleaning up existing Kubernetes cluster on all nodes..."
-    
-    cd "$PROJECT_ROOT"
-    
-    # Confirm cleanup
-    echo -e "${Green} Reseting all nodes and removing Kubernetes completely!"
-
-    
-    # Run cleanup playbook
-    ansible-playbook \
-        -i "$INVENTORY_DIR/inventory.ini" \
-        -e "@$VARS_FILE" \
-        -e "cluster_name=${CLUSTER_NAME}" \
-        --become \
-        Ansible/playbooks/cleanup_cluster.yml
-    
-    if [[ $? -eq 0 ]]; then
-        print_success "Cluster cleanup completed successfully"
-        echo ""
-        print_info "Waiting 10 seconds for services to settle..."
-        sleep 10
-        echo ""
-    else
-        print_error "Cluster cleanup failed"
-        exit 1
-    fi
-}
 
 # ==============================================================================
 # MENU FUNCTIONS
@@ -525,10 +493,9 @@ show_menu() {
     echo "  2) ⚖️  Deploy HAProxy only (requires existing cluster)"  
     echo "  3) 📋 Generate inventories only"
     echo "  4) ✅ Validate cluster"
-    echo "  5) 📊 Show status"
-    echo "  6) 🧹 Cleanup cluster (reset all nodes)"           
-    echo "  7) 🔄 Cleanup + Deploy (full reset)"              
-    echo "  8) 🚪 Exit"  
+    echo "  5) 📊 Show status"          
+    echo "  6) 🚪 Exit"  
+    echo -e "${YELLOW}⚠️  For cluster cleanup, use: ./cleanup.sh${NC}"
     echo ""
 }
 
@@ -586,7 +553,6 @@ main() {
 
                 # Run deployment
                 generate_inventory
-                cleanup_cluster
                 deploy_cluster
                 validate_cluster
 
@@ -609,6 +575,7 @@ main() {
             *)
                 print_error "Unknown action: $1"
                 echo "Usage: $0 [deploy|validate|inventory|status|haproxy]"
+                echo "For cleanup, use: ./cleanup.sh"
                 exit 1
                 ;;
         esac
@@ -629,7 +596,6 @@ main() {
                 echo ""
                 
                 # Run deployment
-                cleanup_cluster
                 generate_inventory
                 deploy_cluster
                 
@@ -649,12 +615,8 @@ main() {
             5)
                 show_status
                 ;;
-            
-            6)                                               
-                cleanup_cluster
-                ;;
 
-            7)
+            6)
                 print_info "Exiting..."
                 exit 0
                 ;;
