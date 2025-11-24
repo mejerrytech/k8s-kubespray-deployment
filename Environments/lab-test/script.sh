@@ -284,26 +284,26 @@ deploy_cluster() {
     print_success "HAProxy load balancer deployment completed"
 
 
-    # Step 4: Fix worker node kubelet configuration
-    print_step "Phase 4: Fixing worker node kubelet configuration"
+    # # Step 4: Fix worker node kubelet configuration
+    # print_step "Phase 4: Fixing worker node kubelet configuration"
     
-    ansible-playbook \
-        -i "$INVENTORY_DIR/inventory.ini" \
-        -e "@$VARS_FILE" \
-        -e "cluster_name=${CLUSTER_NAME}" \
-        -e "api_vip=$(get_yaml_value "network.api_vip")" \
-        -e "virtual_ip=$(get_yaml_value "network.virtual_ip")" \
-        --become \
-        Ansible/playbooks/fix_worker_kubelet.yml
+    # ansible-playbook \
+    #     -i "$INVENTORY_DIR/inventory.ini" \
+    #     -e "@$VARS_FILE" \
+    #     -e "cluster_name=${CLUSTER_NAME}" \
+    #     -e "api_vip=$(get_yaml_value "network.api_vip")" \
+    #     -e "virtual_ip=$(get_yaml_value "network.virtual_ip")" \
+    #     --become \
+    #     Ansible/playbooks/fix_worker_kubelet.yml
     
-    if [[ $? -eq 0 ]]; then
-        print_success "Worker node configuration fix completed"
-    else
-        print_warning "Worker node fix had issues (cluster may still be functional)"
-    fi
+    # if [[ $? -eq 0 ]]; then
+    #     print_success "Worker node configuration fix completed"
+    # else
+    #     print_warning "Worker node fix had issues (cluster may still be functional)"
+    # fi
     
     # Step 5: Fix worker and master node kubelet cgroup configuration
-    print_step "Phase 5: Fixing worker and master node kubelet cgroup configuration"
+    print_step "Phase 4: Fixing worker and master node kubelet cgroup configuration"
     
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \

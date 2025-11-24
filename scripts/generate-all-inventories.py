@@ -352,6 +352,7 @@ class UnifiedInventoryGenerator:
             return False
 
     def _generate_kubespray_group_vars(self, config: Dict):
+    
         """Generate Kubespray group_vars files"""
         group_vars_dir = self.kubespray_inventory_dir / "group_vars"
         
@@ -367,30 +368,30 @@ class UnifiedInventoryGenerator:
                     if 'ip' in master_config:
                         node_ips.append(master_config['ip'])
         
-        # Get load balancer VIP - DEFINED OUTSIDE if block
-        lb_vip = network_config.get('api_vip') or network_config.get('virtual_ip')
-        if not lb_vip:
-            for master in nodes_config.get('masters', []):
-                if 'ip' in master:
-                    lb_vip = master['ip']
-                    break
-        if not lb_vip:
-            network_prefix = network_config.get('prefix', '192.168.56')
-            lb_vip = f"{network_prefix}.153"
-            self.print_warning(f"Using calculated fallback IP: {lb_vip}")
+        # # Get load balancer VIP - DEFINED OUTSIDE if block
+        # lb_vip = network_config.get('api_vip') or network_config.get('virtual_ip')
+        # if not lb_vip:
+        #     for master in nodes_config.get('masters', []):
+        #         if 'ip' in master:
+        #             lb_vip = master['ip']
+        #             break
+        # if not lb_vip:
+        #     network_prefix = network_config.get('prefix', '192.168.56')
+        #     lb_vip = f"{network_prefix}.153"
+        #     self.print_warning(f"Using calculated fallback IP: {lb_vip}")
         
 
-        # Get first HAProxy node IP for bootstrap (avoids VIP timing issues)
-        haproxy_nodes = nodes_config.get('haproxy', [])
-        bootstrap_apiserver = lb_vip  # Default to VIP
+        # # Get first HAProxy node IP for bootstrap (avoids VIP timing issues)
+        # haproxy_nodes = nodes_config.get('haproxy', [])
+        # bootstrap_apiserver = lb_vip  # Default to VIP
         
-        if haproxy_nodes and len(haproxy_nodes) > 0:
-            first_haproxy_node = haproxy_nodes[0]
-            if isinstance(first_haproxy_node, dict) and 'ip' in first_haproxy_node:
-                bootstrap_apiserver = first_haproxy_node['ip']
-                self.print_info(f"Using first HAProxy node IP for bootstrap: {bootstrap_apiserver}")
-        else:
-            self.print_warning(f"No HAProxy nodes found, using VIP for bootstrap: {lb_vip}")
+        # if haproxy_nodes and len(haproxy_nodes) > 0:
+        #     first_haproxy_node = haproxy_nodes[0]
+        #     if isinstance(first_haproxy_node, dict) and 'ip' in first_haproxy_node:
+        #         bootstrap_apiserver = first_haproxy_node['ip']
+        #         self.print_info(f"Using first HAProxy node IP for bootstrap: {bootstrap_apiserver}")
+        # else:
+        #     self.print_warning(f"No HAProxy nodes found, using VIP for bootstrap: {lb_vip}")
         
         services_config = config.get('services', {})
         haproxy_config = config.get('haproxy', {})
@@ -477,13 +478,14 @@ class UnifiedInventoryGenerator:
             
 
 
-            # Get first master IP for testing WITHOUT load balancer
-            first_master_ip = None
-            if node_ips and len(node_ips) > 0:
-                first_master_ip = node_ips[0]
+            # # Get first master IP for testing WITHOUT load balancer
+            # first_master_ip = None
+            # if node_ips and len(node_ips) > 0:
+            #     first_master_ip = node_ips[0]
 
-            f.write("\n# API Configuration - Using first master directly for testing\n")
-            f.write(f"kubeadm_controlplane_address: {first_master_ip}\n")
+            f.write("\n# API Load Balancer Configuration\n")
+            f.write("# Using Kubespray's built-in nginx proxy for automatic HA across all masters\n")
+            f.write("loadbalancer_apiserver_localhost: true\n")
 
             # f.write("\n# API Load Balancer Configuration\n")
             # f.write("# Using first HAProxy node IP for initial bootstrap to avoid VIP timing issues\n")
@@ -504,10 +506,10 @@ class UnifiedInventoryGenerator:
                 for ip in node_ips:
                     f.write(f'  - "{ip}"\n')
             
-            f.write("\n# Load balancer configuration\n")
-            f.write("loadbalancer_apiserver_localhost: false\n")
-            f.write(f"kubeadm_control_plane_endpoint: \"{first_master_ip}:6443\"\n")
-            f.write("nginx_kube_apiserver_port: 6443\n")
+            # f.write("\n# Load balancer configuration\n")
+            # f.write("loadbalancer_apiserver_localhost: false\n")
+            # f.write(f"kubeadm_control_plane_endpoint: \"{first_master_ip}:6443\"\n")
+            # f.write("nginx_kube_apiserver_port: 6443\n")
         
         bootstrap_os = config.get('cluster', {}).get('bootstrap_os', 'ubuntu')
         
@@ -529,6 +531,8 @@ class UnifiedInventoryGenerator:
             self.print_success("Generated YAML files validated successfully")
         else:
             self.print_error("YAML validation failed")
+
+
     def generate_haproxy_inventory(self, config: Dict, discovered_ips: Dict[str, str]) -> bool:
         """Generate HAProxy inventory"""
         self.print_step("Generating HAProxy inventory...")
