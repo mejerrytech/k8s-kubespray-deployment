@@ -88,7 +88,7 @@ ssh -V
 sudo dnf install -y python3 python3-pip git ansible
 
 # Install Python dependencies
-pip3 install pyyaml
+pip3 install pyyaml jmespath
 ```
 
 ---
@@ -126,7 +126,7 @@ Ensure passwordless SSH and sudo access to all nodes:
 ```bash
 # Test SSH access to all nodes
 ansible all -i Kubespray/inventory/lab-test/inventory.ini -m ping
-
+```
 
 ### 4. Deploy the Cluster
 
@@ -165,9 +165,8 @@ cd Environments/lab-test
 
 **Safety Features:**
 - **Triple confirmation required:**
-  1. Type exact cluster name (e.g., `lab-test`)
-  2. Type `YES` in capital letters
-  3. Type `DELETE` to proceed
+  1. Type `YES` in capital letters
+
 - Clear danger warnings throughout
 - Timestamped log files: `/tmp/k8s-cleanup-{cluster-name}-YYYYMMDD-HHMMSS.log`
 - Cannot be undone - data loss is permanent!
@@ -337,7 +336,7 @@ cd Environments/lab-test
 ```
 
 ⚠️ **Note:** Cleanup is intentionally separated from `script.sh` to prevent accidental deletion. See [Cluster Cleanup](#5-cluster-cleanup) section for details.
-```
+
 
 ### Deployment Phases
 
