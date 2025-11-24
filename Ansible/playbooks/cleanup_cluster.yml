@@ -1,0 +1,57 @@
+---
+- name: Clean up existing Kubernetes cluster
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if node is part of a cluster
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Reset kubeadm on nodes
+      shell: |
+        kubeadm reset -f
+      when: kubelet_conf.stat.exists
+      ignore_errors: yes
+
+    - name: Stop kubelet service
+      systemd:
+        name: kubelet
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove Kubernetes directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+        - /etc/cni/net.d
+        - /var/lib/cni
+        - /opt/cni
+
+    - name: Remove CNI binaries
+      file:
+        path: /opt/cni/bin
+        state: absent
+
+    - name: Clean iptables rules
+      shell: |
+        iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+      ignore_errors: yes
+
+    - name: Restart network service
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - NetworkManager
+      ignore_errors: yes
+
+    - name: Print cleanup status
+      debug:
+        msg: "Node {{ inventory_hostname }} cleaned successfully"

@@ -462,6 +462,39 @@ deploy_haproxy_only() {
 }
 
 # ==============================================================================
+# CLEANUP FUNCTION
+# ==============================================================================
+
+cleanup_cluster() {
+    print_step "Cleaning up existing Kubernetes cluster on all nodes..."
+    
+    cd "$PROJECT_ROOT"
+    
+    # Confirm cleanup
+    echo -e "${Green} Reseting all nodes and removing Kubernetes completely!"
+
+    
+    # Run cleanup playbook
+    ansible-playbook \
+        -i "$INVENTORY_DIR/inventory.ini" \
+        -e "@$VARS_FILE" \
+        -e "cluster_name=${CLUSTER_NAME}" \
+        --become \
+        Ansible/playbooks/cleanup_cluster.yml
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Cluster cleanup completed successfully"
+        echo ""
+        print_info "Waiting 10 seconds for services to settle..."
+        sleep 10
+        echo ""
+    else
+        print_error "Cluster cleanup failed"
+        exit 1
+    fi
+}
+
+# ==============================================================================
 # MENU FUNCTIONS
 # ==============================================================================
 
@@ -473,7 +506,9 @@ show_menu() {
     echo "  3) 📋 Generate inventories only"
     echo "  4) ✅ Validate cluster"
     echo "  5) 📊 Show status"
-    echo "  6) 🚪 Exit"
+    echo "  6) 🧹 Cleanup cluster (reset all nodes)"           
+    echo "  7) 🔄 Cleanup + Deploy (full reset)"              
+    echo "  8) 🚪 Exit"  
     echo ""
 }
 
@@ -531,12 +566,16 @@ main() {
 
                 # Run deployment
                 generate_inventory
+                cleanup_cluster
                 deploy_cluster
                 validate_cluster
 
                 # Log completion message
                 echo ""
                 print_success "Full deployment log saved: $LOG_FILE"
+                ;;
+            "cleanup")                                        
+                cleanup_cluster
                 ;;
             "validate")
                 validate_cluster
@@ -570,6 +609,7 @@ main() {
                 echo ""
                 
                 # Run deployment
+                cleanup_cluster
                 generate_inventory
                 deploy_cluster
                 
@@ -589,7 +629,12 @@ main() {
             5)
                 show_status
                 ;;
-            6)
+            
+            6)                                               
+                cleanup_cluster
+                ;;
+
+            7)
                 print_info "Exiting..."
                 exit 0
                 ;;
