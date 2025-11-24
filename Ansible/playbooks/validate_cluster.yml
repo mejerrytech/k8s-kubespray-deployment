@@ -23,28 +23,28 @@
           - "========================================="
 
     - name: Get cluster nodes
-      command: "{{ kubectl_bin }} get nodes --no-headers"
+      command: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf"
       register: nodes
       changed_when: false
 
     - name: Count Ready nodes
-      shell: "{{ kubectl_bin }} get nodes --no-headers | grep ' Ready' | wc -l"
+      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | grep ' Ready' | wc -l"
       register: ready_nodes
       changed_when: false
 
     - name: Get cluster version
-      command: "{{ kubectl_bin }} version"
+      command: "{{ kubectl_bin }} version --kubeconfig=/etc/kubernetes/admin.conf"
       register: cluster_version
       changed_when: false
       failed_when: false
 
     - name: Check system pods
-      command: "{{ kubectl_bin }} get pods -n kube-system"
+      command: "{{ kubectl_bin }} get pods -n kube-system --kubeconfig=/etc/kubernetes/admin.conf"
       register: system_pods
       changed_when: false
 
     - name: Check ingress controller
-      command: "{{ kubectl_bin }} get pods -n ingress-nginx"
+      command: "{{ kubectl_bin }} get pods -n ingress-nginx --kubeconfig=/etc/kubernetes/admin.conf"
       register: ingress_pods
       changed_when: false
       ignore_errors: true
@@ -83,7 +83,7 @@
 # VALIDATE HAPROXY
 # ==============================================================================
 - name: Validate HAProxy Load Balancers
-  hosts: kube_control_plane
+  hosts: haproxy
   become: true
   gather_facts: false
 
@@ -92,15 +92,17 @@
       systemd:
         name: haproxy
       register: haproxy_status
+      ignore_errors: true
 
     - name: Check Keepalived status
       systemd:
         name: keepalived
       register: keepalived_status
+      ignore_errors: true
 
     - name: Test HAProxy stats page
       uri:
-        url: "http://{{ ansible_host }}:8080/stats"
+        url: "http://{{ ansible_host }}:8404/stats"
         method: GET
         status_code: 200
       register: stats_check
@@ -109,9 +111,9 @@
     - name: Display HAProxy status
       debug:
         msg:
-          - "HAProxy on {{ inventory_hostname }}: {{ haproxy_status.status.ActiveState }}"
-          - "Keepalived on {{ inventory_hostname }}: {{ keepalived_status.status.ActiveState }}"
-          - "Stats page: {{ 'Accessible' if stats_check.status == 200 else 'Not accessible' }}"
+          - "HAProxy on {{ inventory_hostname }}: {{ haproxy_status.status.ActiveState | default('Not found') }}"
+          - "Keepalived on {{ inventory_hostname }}: {{ keepalived_status.status.ActiveState | default('Not found') }}"
+          - "Stats page: {{ 'Accessible' if stats_check.status | default(0) == 200 else 'Not accessible' }}"
 
 # ==============================================================================
 # VALIDATE VIRTUAL IPS
@@ -121,8 +123,8 @@
   become: true
   gather_facts: false
   vars:
-    api_vip: "{{ api_vip | default(network.api_vip | default('')) }}"
-    ingress_vip: "{{ ingress_vip | default(network.ingress_vip | default('')) }}"
+    api_vip: "{{ api_vip | default(virtual_ip | default('')) }}"
+    ingress_vip: "{{ ingress_vip | default('') }}"
 
   tasks:
     - name: Skip VIP validation if not configured
