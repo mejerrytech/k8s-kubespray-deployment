@@ -224,11 +224,11 @@
 
     - name: Calculate cleanup success
       set_fact:
-        processes_clean: "{{ post_k8s_processes.stdout == '' }}"
+        processes_clean: "{{ post_k8s_processes.stdout | default('') == '' }}"
         dirs_clean: "{{ post_k8s_dirs.results | selectattr('stat.exists') | list | length == 0 }}"
         bins_clean: "{{ post_k8s_bins.results | selectattr('stat.exists') | list | length == 0 }}"
-        containerd_running: "{{ containerd_status.status.ActiveState == 'active' }}"
-        node_ready: "{{ (post_k8s_processes.stdout == '') and (post_k8s_dirs.results | selectattr('stat.exists') | list | length == 0) }}"
+        containerd_running: "{{ containerd_status.status is defined and containerd_status.status.ActiveState | default('') == 'active' }}"
+        node_ready: "{{ (post_k8s_processes.stdout | default('') == '') and (post_k8s_dirs.results | selectattr('stat.exists') | list | length == 0) }}"
 
     - name: Display verification results
       debug:
