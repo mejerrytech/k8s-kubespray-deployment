@@ -5,21 +5,32 @@
   gather_facts: false
   
   tasks:
-    - name: Check if node is part of a cluster
-      stat:
-        path: /etc/kubernetes/kubelet.conf
-      register: kubelet_conf
+    - name: Display cleanup warning
+      debug:
+        msg:
+          - "========================================="
+          - "KUBERNETES CLUSTER CLEANUP"
+          - "========================================="
+          - "This will completely remove Kubernetes from {{ inventory_hostname }}"
+      run_once: false
+
+    - name: Stop all Kubernetes and container services
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - kubelet
+        - kube-apiserver
+        - kube-controller-manager
+        - kube-scheduler
+        - etcd
+        - containerd
+        - docker
+      ignore_errors: yes
 
     - name: Reset kubeadm on nodes
       shell: |
-        kubeadm reset -f
-      when: kubelet_conf.stat.exists
-      ignore_errors: yes
-
-    - name: Stop kubelet service
-      systemd:
-        name: kubelet
-        state: stopped
+        kubeadm reset -f --ignore-preflight-errors=all
       ignore_errors: yes
 
     - name: Remove Kubernetes directories
@@ -30,27 +41,65 @@
         - /etc/kubernetes
         - /var/lib/kubelet
         - /var/lib/etcd
-        - /etc/cni/net.d
+        - /var/lib/containerd
+        - /etc/cni
         - /var/lib/cni
         - /opt/cni
+        - /run/containerd
+        - /var/lib/docker
+        - /var/run/kubernetes
+        - /tmp/k8s-*
+        - /tmp/kubespray_cache
+        - /etc/systemd/system/kubelet.service.d
+      ignore_errors: yes
 
-    - name: Remove CNI binaries
+    - name: Remove Kubernetes binaries
       file:
-        path: /opt/cni/bin
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /usr/local/bin/kubectl
+        - /usr/local/bin/kubeadm
+        - /usr/local/bin/kubelet
+        - /usr/local/bin/kube-proxy
+        - /usr/local/bin/etcd
+        - /usr/local/bin/etcdctl
+      ignore_errors: yes
+
+    - name: Remove kubelet systemd service files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/kubelet.service
+        - /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+      ignore_errors: yes
 
     - name: Clean iptables rules
       shell: |
         iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
       ignore_errors: yes
 
-    - name: Restart network service
-      systemd:
-        name: "{{ item }}"
-        state: restarted
-      loop:
-        - NetworkManager
+    - name: Clean ipvsadm rules
+      shell: |
+        ipvsadm --clear
       ignore_errors: yes
+      when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Start containerd service
+      systemd:
+        name: containerd
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Wait for containerd to stabilize
+      pause:
+        seconds: 5
 
     - name: Print cleanup status
       debug:
