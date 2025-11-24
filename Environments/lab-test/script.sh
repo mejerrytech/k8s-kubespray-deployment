@@ -245,6 +245,26 @@ deploy_cluster() {
     
     print_success "Kubernetes cluster deployment completed"
 
+
+
+    # Step 2.5: Setup kubeconfig for users
+    print_step "Setting up kubeconfig for non-root users..."
+
+    ansible-playbook \
+        -i "$INVENTORY_DIR/inventory.ini" \
+        -e "@$VARS_FILE" \
+        --become \
+        Ansible/playbooks/setup_kubeconfig_users.yml
+
+    if [[ $? -eq 0 ]]; then
+        print_success "Kubeconfig setup completed"
+        print_info "Users can now run 'kubectl get nodes' without --kubeconfig"
+    else
+        print_warning "Kubeconfig setup had issues"
+    fi
+
+
+
     # Step 3: Deploy HAProxy load balancer
     print_step "Phase 3: HAProxy load balancer deployment"
     cd "$PROJECT_ROOT"
