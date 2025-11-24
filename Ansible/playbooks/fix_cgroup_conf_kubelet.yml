@@ -60,7 +60,7 @@
       when: kubelet_service_file_stat.stat.exists
 
 - name: Verify Worker and Master Nodes
-  hosts: k8s_cluster
+  hosts: kube_control_plane[0]
   become: true
   gather_facts: false
   vars:
@@ -70,17 +70,24 @@
 
   tasks:
     - name: Get current worker and master node status
-      shell: "{{ kubectl_bin }} get nodes --no-headers | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
+      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
       register: ready_nodes
       changed_when: false
       failed_when: false
 
-    - name: Check if all workers are already ready
+    - name: Debug ready nodes count
+      debug:
+        msg: "Ready nodes: {{ ready_nodes.stdout | default('N/A') }}/{{ groups['k8s_cluster'] | length }}"
+
+    - name: Check if all nodes are already ready
       set_fact:
         all_ready: "{{ ready_nodes.stdout | int == groups['k8s_cluster'] | length }}"
+      when: 
+        - ready_nodes is defined
+        - ready_nodes.stdout is defined
 
     - name: Wait for nodes to become ready (only if not all ready)
-      shell: "{{ kubectl_bin }} get nodes --no-headers | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
+      shell: "{{ kubectl_bin }} get nodes --no-headers --kubeconfig=/etc/kubernetes/admin.conf | awk '$2 ~ /^Ready/ {c++} END{print c+0}'"
       register: ready_nodes
       until: ready_nodes.stdout | int == groups['k8s_cluster'] | length
       retries: 6
@@ -89,27 +96,44 @@
       failed_when: false
       when: not all_ready | default(false) | bool
 
+    - name: Debug wait result
+      debug:
+        msg: "Ready nodes after wait: {{ ready_nodes.stdout | default('N/A') }}"
+      when: not all_ready | default(false) | bool
+
     - name: Get final node status
-      command: "{{ kubectl_bin }} get nodes -o wide"
+      command: "{{ kubectl_bin }} get nodes -o wide --kubeconfig=/etc/kubernetes/admin.conf"
       register: node_status
       changed_when: false
       failed_when: false
 
+    - name: Debug final node status
+      debug:
+        msg: "{{ node_status.stdout_lines | default(['Unable to get node status']) }}"
+      when: 
+        - node_status is defined
+        - node_status.stdout_lines is defined
+
     - name: Check if all nodes are ready
       set_fact:
         all_nodes_ready: "{{ ready_nodes.stdout | int == groups['k8s_cluster'] | length }}"
-      when: ready_nodes is defined
+      when: 
+        - ready_nodes is defined
+        - ready_nodes.stdout is defined
 
     - name: Display final status
       debug:
         msg:
           - "========================================="
-          - "Worker and master Node Fix CGroup Complete"
+          - "Worker and Master Node CGroup Fix Complete"
           - "========================================="
           - "Ready Nodes: {{ ready_nodes.stdout | default('N/A') }}/{{ groups['k8s_cluster'] | length }}"
           - "Status: {{ 'All nodes ready' if (all_nodes_ready | default(false)) else 'Some nodes may not be ready yet' }}"
           - ""
+          - "{% if node_status is defined and node_status.stdout_lines is defined %}"
           - "Node Status:"
-          - "{{ node_status.stdout_lines | default(['Unable to get node status']) }}"
+          - "{{ node_status.stdout_lines | join('\\n') }}"
+          - "{% else %}"
+          - "Node Status: Unable to get node status"
+          - "{% endif %}"
           - "========================================="
-      when: ready_nodes is defined or node_status is defined
