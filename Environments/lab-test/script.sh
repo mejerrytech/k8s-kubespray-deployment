@@ -172,7 +172,7 @@ deploy_cluster() {
         print_error "Bridge module loading failed"
         exit 1
     fi
-    
+
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
         -e "@$VARS_FILE" \
@@ -250,6 +250,7 @@ deploy_cluster() {
     # Step 2.5: Setup kubeconfig for users
     print_step "Setting up kubeconfig for non-root users..."
 
+    cd "$PROJECT_ROOT"
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
         -e "@$VARS_FILE" \
