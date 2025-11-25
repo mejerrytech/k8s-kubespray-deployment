@@ -91,13 +91,6 @@ cleanup_cluster() {
     echo -e "${YELLOW}This action is IRREVERSIBLE and CANNOT be undone!${NC}"
     echo ""
     
-    # Check if inventory exists
-    if [[ ! -f "$INVENTORY_DIR/inventory.ini" ]]; then
-        print_error "Inventory file not found: $INVENTORY_DIR/inventory.ini"
-        print_info "Cannot proceed without inventory file"
-        exit 1
-    fi
-    
     # Confirmation
     echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
     read -p "$(echo -e ${RED}Are you ABSOLUTELY SURE you want to destroy this cluster? Type YES in capital letters: ${NC})" confirm_yes
@@ -117,6 +110,40 @@ cleanup_cluster() {
     print_info "Cleanup log: $LOG_FILE"
     echo ""
     sleep 3
+    
+    # =========================================================================
+    # STAGE 0: GENERATE INVENTORY (if needed)
+    # =========================================================================
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    print_step "Stage 0: Generating inventory for ${CLUSTER_NAME}..."
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    cd "$PROJECT_ROOT"
+    
+    python3 scripts/generate-all-inventories.py "${CLUSTER_NAME}"
+    
+    INVENTORY_EXIT=$?
+    
+    if [[ $INVENTORY_EXIT -ne 0 ]]; then
+        echo ""
+        print_error "❌ Inventory generation failed"
+        print_info "Cannot proceed without inventory"
+        exit 1
+    else
+        echo ""
+        print_success "✅ Inventory generated successfully"
+    fi
+    
+    # Verify inventory file exists
+    if [[ ! -f "$INVENTORY_DIR/inventory.ini" ]]; then
+        print_error "Inventory file not found: $INVENTORY_DIR/inventory.ini"
+        print_info "Cannot proceed without inventory file"
+        exit 1
+    fi
+    
+    echo ""
+    sleep 2
     
     # Run cleanup - TWO STAGE APPROACH
     cd "$PROJECT_ROOT"
