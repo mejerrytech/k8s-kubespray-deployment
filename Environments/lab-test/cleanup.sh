@@ -129,11 +129,14 @@ cleanup_cluster() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
     
+    # Must cd into Kubespray directory for reset.yml to work properly
+    cd "$PROJECT_ROOT/Kubespray"
+    
     ansible-playbook \
-        -i "$INVENTORY_DIR/inventory.ini" \
-        -e reset_confirmation=yes \
+        -i "inventory/${CLUSTER_NAME,,}/inventory.ini" \
+        reset.yml \
         --become \
-        "$PROJECT_ROOT/Kubespray/reset.yml"
+        -e "reset_confirmation=yes"
     
     KUBESPRAY_EXIT=$?
     
