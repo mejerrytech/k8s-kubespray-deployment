@@ -159,11 +159,12 @@ cleanup_cluster() {
     # Must cd into Kubespray directory for reset.yml to work properly
     cd "$PROJECT_ROOT/Kubespray"
     
+    # Use || true to ensure we continue even if reset.yml fails
     ansible-playbook \
         -i "inventory/${CLUSTER_NAME,,}/inventory.ini" \
         reset.yml \
         --become \
-        -e "reset_confirmation=yes"
+        -e "reset_confirmation=yes" || true
     
     KUBESPRAY_EXIT=$?
     
