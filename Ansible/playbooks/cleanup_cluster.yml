@@ -66,6 +66,13 @@
           - "This will completely remove Kubernetes from {{ inventory_hostname }}"
       run_once: false
 
+    - name: Force kill all running containers
+      shell: |
+        crictl stop $(crictl ps -q) 2>/dev/null || true
+        crictl rm $(crictl ps -aq) 2>/dev/null || true
+        sleep 2
+      ignore_errors: yes
+
     - name: Stop all Kubernetes and container services
       systemd:
         name: "{{ item }}"
@@ -85,24 +92,43 @@
         kubeadm reset -f --ignore-preflight-errors=all
       ignore_errors: yes
 
-    - name: Remove Kubernetes directories
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/kubernetes
-        - /var/lib/kubelet
-        - /var/lib/etcd
-        - /var/lib/containerd
-        - /etc/cni
-        - /var/lib/cni
-        - /opt/cni
-        - /run/containerd
-        - /var/lib/docker
-        - /var/run/kubernetes
-        - /tmp/k8s-*
-        - /tmp/kubespray_cache
-        - /etc/systemd/system/kubelet.service.d
+    - name: Find all kubelet mounts
+      shell: mount | grep '/var/lib/kubelet' | awk '{print $3}'
+      register: kubelet_mounts
+      changed_when: false
+      failed_when: false
+
+    - name: Unmount kubelet volumes
+      shell: |
+        for mount_point in {{ kubelet_mounts.stdout_lines | join(' ') }}; do
+          umount -f "$mount_point" 2>/dev/null || true
+        done
+      when: kubelet_mounts.stdout_lines | length > 0
+      ignore_errors: yes
+
+    - name: Kill any remaining processes
+      shell: |
+        pkill -9 kube || true
+        pkill -9 etcd || true
+        pkill -9 containerd-shim || true
+        sleep 2
+      ignore_errors: yes
+
+    - name: Remove Kubernetes directories forcefully
+      shell: |
+        rm -rf /etc/kubernetes || true
+        rm -rf /var/lib/kubelet || true
+        rm -rf /var/lib/etcd || true
+        rm -rf /var/lib/containerd || true
+        rm -rf /etc/cni || true
+        rm -rf /var/lib/cni || true
+        rm -rf /opt/cni || true
+        rm -rf /run/containerd || true
+        rm -rf /var/lib/docker || true
+        rm -rf /var/run/kubernetes || true
+        rm -rf /tmp/k8s-* || true
+        rm -rf /tmp/kubespray_cache || true
+        rm -rf /etc/systemd/system/kubelet.service.d || true
       ignore_errors: yes
 
     - name: Remove Kubernetes binaries
@@ -125,6 +151,13 @@
       loop:
         - /etc/systemd/system/kubelet.service
         - /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+      ignore_errors: yes
+
+    - name: Remove CNI network interfaces
+      shell: |
+        for iface in $(ip link show | grep -E 'cali|flannel|cni' | awk -F: '{print $2}' | tr -d ' '); do
+          ip link delete $iface 2>/dev/null || true
+        done
       ignore_errors: yes
 
     - name: Clean iptables rules
@@ -239,6 +272,11 @@
           - "  K8s binaries: {{ '✅ All removed' if bins_clean else '❌ Some remain' }}"
           - "  Containerd: {{ '✅ Running' if containerd_running else '❌ Not running' }}"
           - "  Status: {{ '✅ READY FOR DEPLOYMENT' if node_ready else '⚠️ CLEANUP INCOMPLETE' }}"
+
+    # - name: Fail playbook if cleanup incomplete
+    #   fail:
+    #     msg: "Cleanup incomplete on {{ inventory_hostname }} - manual intervention required"
+    #   when: not node_ready
 
 # ==============================================================================
 # FINAL SUMMARY
