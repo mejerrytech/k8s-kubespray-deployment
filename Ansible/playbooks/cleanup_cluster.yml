@@ -66,10 +66,14 @@
           - "This will completely remove Kubernetes from {{ inventory_hostname }}"
       run_once: false
 
+    # CRITICAL FIX #1: Kill all containers FIRST
     - name: Force kill all running containers
       shell: |
         crictl stop $(crictl ps -q) 2>/dev/null || true
         crictl rm $(crictl ps -aq) 2>/dev/null || true
+        ctr -n k8s.io tasks kill --all --signal SIGKILL 2>/dev/null || true
+        ctr -n k8s.io tasks delete --force 2>/dev/null || true
+        ctr -n k8s.io containers rm $(ctr -n k8s.io containers ls -q) 2>/dev/null || true
         sleep 2
       ignore_errors: yes
 
@@ -92,6 +96,7 @@
         kubeadm reset -f --ignore-preflight-errors=all
       ignore_errors: yes
 
+    # CRITICAL FIX #2: Unmount volumes BEFORE removing directories
     - name: Find all kubelet mounts
       shell: mount | grep '/var/lib/kubelet' | awk '{print $3}'
       register: kubelet_mounts
@@ -114,6 +119,7 @@
         sleep 2
       ignore_errors: yes
 
+    # CRITICAL FIX #3: Use rm -rf instead of Ansible file module
     - name: Remove Kubernetes directories forcefully
       shell: |
         rm -rf /etc/kubernetes || true
@@ -142,6 +148,8 @@
         - /usr/local/bin/kube-proxy
         - /usr/local/bin/etcd
         - /usr/local/bin/etcdctl
+        - /usr/local/bin/crictl
+        - /usr/local/bin/calicoctl.sh
       ignore_errors: yes
 
     - name: Remove kubelet systemd service files
@@ -150,9 +158,11 @@
         state: absent
       loop:
         - /etc/systemd/system/kubelet.service
-        - /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+        - /etc/systemd/system/kubelet.service.d
+        - /usr/lib/systemd/system/kubelet.service
       ignore_errors: yes
 
+    # CRITICAL FIX #4: Remove CNI interfaces
     - name: Remove CNI network interfaces
       shell: |
         for iface in $(ip link show | grep -E 'cali|flannel|cni' | awk -F: '{print $2}' | tr -d ' '); do
@@ -163,6 +173,7 @@
     - name: Clean iptables rules
       shell: |
         iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+        ip6tables -F && ip6tables -t nat -F && ip6tables -t mangle -F && ip6tables -X
       ignore_errors: yes
 
     - name: Clean ipvsadm rules
@@ -273,10 +284,11 @@
           - "  Containerd: {{ '✅ Running' if containerd_running else '❌ Not running' }}"
           - "  Status: {{ '✅ READY FOR DEPLOYMENT' if node_ready else '⚠️ CLEANUP INCOMPLETE' }}"
 
-    # - name: Fail playbook if cleanup incomplete
-    #   fail:
-    #     msg: "Cleanup incomplete on {{ inventory_hostname }} - manual intervention required"
-    #   when: not node_ready
+    # CRITICAL FIX #5: Fail the playbook if cleanup is incomplete
+    - name: Fail playbook if cleanup incomplete
+      fail:
+        msg: "Cleanup incomplete on {{ inventory_hostname }} - manual intervention required"
+      when: not node_ready
 
 # ==============================================================================
 # FINAL SUMMARY
@@ -296,7 +308,7 @@
           - "All nodes should show: ✅ READY FOR DEPLOYMENT"
           - ""
           - "If any node shows ⚠️ CLEANUP INCOMPLETE:"
-          - "  1. Review the specific failures above"
-          - "  2. Manually verify the node"
-          - "  3. Re-run cleanup if needed"
+          - "  1. The playbook has FAILED (as it should)"
+          - "  2. Review the specific failures above"
+          - "  3. Manual cleanup may be required"
           - "========================================="

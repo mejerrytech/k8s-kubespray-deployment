@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ==============================================================================
-# KUBERNETES CLUSTER CLEANUP SCRIPT
+# KUBERNETES CLUSTER CLEANUP SCRIPT - IMPROVED VERSION
 # ==============================================================================
-# This script completely removes Kubernetes from all cluster nodes
+# Two-stage cleanup: Kubespray reset + Forceful custom cleanup
 # Use with EXTREME CAUTION - this is destructive and irreversible!
 # ==============================================================================
 
@@ -11,7 +11,7 @@ set -euo pipefail
 
 # Script metadata
 SCRIPT_NAME="Kubernetes Cluster Cleanup"
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="2.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -80,7 +80,9 @@ cleanup_cluster() {
     echo -e "  ${CYAN}Inventory:${NC} ${INVENTORY_DIR}/inventory.ini"
     echo ""
     echo -e "${RED}This will:${NC}"
-    echo "  • Stop all Kubernetes services (kubelet, etcd, containerd, etc.)"
+    echo "  • Run Kubespray's official reset.yml"
+    echo "  • Force kill all containers and processes"
+    echo "  • Unmount all kubelet volumes"
     echo "  • Remove ALL Kubernetes data and configuration"
     echo "  • Delete ALL pods, deployments, and volumes"
     echo "  • Reset ALL nodes to pre-Kubernetes state"
@@ -96,17 +98,7 @@ cleanup_cluster() {
         exit 1
     fi
     
-    # # First confirmation
-    # echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
-    # read -p "$(echo -e ${YELLOW}Type the cluster name \"${CLUSTER_NAME}\" to confirm: ${NC})" confirm_name
-    # echo ""
-    
-    # if [[ "$confirm_name" != "$CLUSTER_NAME" ]]; then
-    #     print_info "Cluster name mismatch. Cleanup cancelled."
-    #     exit 0
-    # fi
-    
-    # Second confirmation
+    # Confirmation
     echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
     read -p "$(echo -e ${RED}Are you ABSOLUTELY SURE you want to destroy this cluster? Type YES in capital letters: ${NC})" confirm_yes
     echo ""
@@ -116,30 +108,54 @@ cleanup_cluster() {
         exit 0
     fi
     
-    # # Third and final confirmation
-    # echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
-    # read -p "$(echo -e ${RED}FINAL WARNING: This will PERMANENTLY DELETE all cluster data. Type \"DELETE\" to proceed: ${NC})" confirm_delete
-    # echo ""
-    
-    # if [[ "$confirm_delete" != "DELETE" ]]; then
-    #     print_info "Cleanup cancelled by user."
-    #     exit 0
-    # fi
-    
     # Setup logging
     LOG_FILE="/tmp/k8s-cleanup-${CLUSTER_NAME}-$(date +%Y%m%d-%H%M%S).log"
     exec > >(tee -a "$LOG_FILE") 2>&1
     
     echo ""
-    print_warning "Proceeding with cluster destruction..."
+    print_warning "Proceeding with TWO-STAGE cluster destruction..."
     print_info "Cleanup log: $LOG_FILE"
     echo ""
     sleep 3
     
-    # Run cleanup playbook
+    # Run cleanup - TWO STAGE APPROACH
     cd "$PROJECT_ROOT"
     
-    print_step "Executing cleanup playbook on all cluster nodes..."
+    # =========================================================================
+    # STAGE 1: KUBESPRAY OFFICIAL RESET
+    # =========================================================================
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    print_step "Stage 1: Running Kubespray reset.yml (official cleanup)..."
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    ansible-playbook \
+        -i "$INVENTORY_DIR/inventory.ini" \
+        -e reset_confirmation=yes \
+        --become \
+        "$PROJECT_ROOT/Kubespray/reset.yml"
+    
+    KUBESPRAY_EXIT=$?
+    
+    if [[ $KUBESPRAY_EXIT -ne 0 ]]; then
+        echo ""
+        print_warning "⚠️  Kubespray reset had issues (exit code: $KUBESPRAY_EXIT)"
+        print_info "Continuing with forceful cleanup to ensure everything is removed..."
+    else
+        echo ""
+        print_success "✅ Kubespray reset completed successfully"
+    fi
+    
+    echo ""
+    sleep 3
+    
+    # =========================================================================
+    # STAGE 2: FORCEFUL CUSTOM CLEANUP
+    # =========================================================================
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    print_step "Stage 2: Running forceful cleanup (ensures complete removal)..."
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
     
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
@@ -148,9 +164,21 @@ cleanup_cluster() {
         --become \
         "$PROJECT_ROOT/Ansible/playbooks/cleanup_cluster.yml"
     
-    if [[ $? -eq 0 ]]; then
+    CUSTOM_EXIT=$?
+    
+    # =========================================================================
+    # FINAL RESULT
+    # =========================================================================
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    
+    if [[ $CUSTOM_EXIT -eq 0 ]]; then
         echo ""
-        print_success "✅ Cluster cleanup completed successfully"
+        print_success "✅ Complete cluster cleanup finished successfully"
+        echo ""
+        print_info "Cleanup stages:"
+        print_info "  • Kubespray reset: $([ $KUBESPRAY_EXIT -eq 0 ] && echo '✅ Success' || echo '⚠️  Had issues')"
+        print_info "  • Forceful cleanup: ✅ Success"
         echo ""
         print_info "All nodes have been reset to pre-Kubernetes state"
         print_info "Waiting 10 seconds for services to stabilize..."
@@ -164,8 +192,15 @@ cleanup_cluster() {
         echo ""
     else
         echo ""
-        print_error "❌ Cluster cleanup failed"
+        print_error "❌ Cluster cleanup failed in Stage 2"
+        echo ""
+        print_info "Cleanup stages:"
+        print_info "  • Kubespray reset: $([ $KUBESPRAY_EXIT -eq 0 ] && echo '✅ Success' || echo '⚠️  Had issues')"
+        print_info "  • Forceful cleanup: ❌ Failed"
+        echo ""
         print_info "Check the log for details: $LOG_FILE"
+        echo ""
+        print_warning "Manual cleanup may be required"
         exit 1
     fi
 }
