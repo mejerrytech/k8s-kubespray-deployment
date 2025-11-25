@@ -146,7 +146,7 @@ cleanup_cluster() {
         -e "@$VARS_FILE" \
         -e "cluster_name=${CLUSTER_NAME}" \
         --become \
-        Ansible/playbooks/cleanup_cluster.yml
+        "$PROJECT_ROOT/Ansible/playbooks/cleanup_cluster.yml"
     
     if [[ $? -eq 0 ]]; then
         echo ""
