@@ -15,7 +15,7 @@
     cluster_name: "{{ cluster_name | lower }}"
     # Health check and authentication
     keepalived_auth_pass: "{{ cluster_name }}123"
-    haproxy_stats_port: "{{ haproxy.stats_port }}"
+    haproxy_stats_port: "{{ haproxy.stats_port | default(8080) }}"
     
   tasks:
     # ==============================================================================
@@ -268,7 +268,7 @@
                   auth_pass {{ keepalived.auth_pass | default(keepalived_auth_pass) }}
               }
               virtual_ipaddress {
-                  {{ virtual_ip }} dev {{ keepalived.interface }}
+                  {{ virtual_ip }} dev {{ keepalived.interface | default(ansible_default_ipv4.interface) }}
               }
               track_script {
                   chk_haproxy
