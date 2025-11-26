@@ -28,6 +28,11 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Record deployment start time
+DEPLOYMENT_START=$(date +%s)
+DEPLOYMENT_START_READABLE=$(date "+%Y-%m-%d %H:%M:%S %Z")
+
+
 # Configuration files
 VARS_FILE="${SCRIPT_DIR}/vars.yml"
 MAIN_FILE="${SCRIPT_DIR}/main.yml"
@@ -152,6 +157,10 @@ generate_inventory() {
 
 deploy_cluster() {
 
+    print_info "Cluster: ${CLUSTER_NAME}"
+    print_info "Deployment started at: ${DEPLOYMENT_START_READABLE}"
+    echo ""
+
     print_step "Deploying ${CLUSTER_NAME} Kubernetes cluster with streamlined approach..."
     
     cd "$PROJECT_ROOT"
@@ -226,24 +235,24 @@ deploy_cluster() {
 
 
 
-
-    # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
-    print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
-    print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
+# ---------------------------- UNCOMMENT -------------------------------------
+    # # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
+    # print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
+    # print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
     
-    cd "$PROJECT_ROOT/Kubespray"
-    ansible-playbook \
-        -i "inventory/${CLUSTER_NAME}/inventory.ini" \
-        --become \
-        cluster.yml \
-        -e "dns_domain=${CLUSTER_NAME,,}.local"
+    # cd "$PROJECT_ROOT/Kubespray"
+    # ansible-playbook \
+    #     -i "inventory/${CLUSTER_NAME}/inventory.ini" \
+    #     --become \
+    #     cluster.yml \
+    #     -e "dns_domain=${CLUSTER_NAME,,}.local"
     
-    if [[ $? -ne 0 ]]; then
-        print_error "Kubespray cluster deployment failed"
-        exit 1
-    fi
+    # if [[ $? -ne 0 ]]; then
+    #     print_error "Kubespray cluster deployment failed"
+    #     exit 1
+    # fi
     
-    print_success "Kubernetes cluster deployment completed"
+    # print_success "Kubernetes cluster deployment completed"
 
 
 
@@ -402,9 +411,24 @@ deploy_cluster() {
         print_warning "Cluster validation had issues (may be normal for new cluster)"
     fi
     
-    # Display success summary
+    # Calculate total deployment time
+    DEPLOYMENT_END=$(date +%s)
+    DEPLOYMENT_END_READABLE=$(date "+%Y-%m-%d %H:%M:%S %Z")
+    DEPLOYMENT_DURATION=$((DEPLOYMENT_END - DEPLOYMENT_START))
+    DEPLOYMENT_MINUTES=$((DEPLOYMENT_DURATION / 60))
+    DEPLOYMENT_SECONDS=$((DEPLOYMENT_DURATION % 60))
+    
+    # Display success summary with timing
     echo ""
-    print_success "🎉 Complete deployment finished!"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    print_success "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${GREEN}Cluster Name:${NC}    ${CLUSTER_NAME}"
+    echo -e "${GREEN}Start Time:${NC}      ${DEPLOYMENT_START_READABLE}"
+    echo -e "${GREEN}End Time:${NC}        ${DEPLOYMENT_END_READABLE}"
+    echo -e "${GREEN}Total Duration:${NC}  ${DEPLOYMENT_MINUTES}m ${DEPLOYMENT_SECONDS}s"
+    echo ""
     
     # Read VIP from vars.yml
     API_VIP=$(get_yaml_value "network.api_vip")

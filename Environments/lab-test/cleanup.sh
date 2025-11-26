@@ -28,6 +28,10 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Record cleanup start time
+CLEANUP_START=$(date +%s)
+CLEANUP_START_READABLE=$(date "+%Y-%m-%d %H:%M:%S %Z")
+
 # Configuration files
 VARS_FILE="${SCRIPT_DIR}/vars.yml"
 INVENTORY_DIR="${PROJECT_ROOT}/Kubespray/inventory/${CLUSTER_NAME,,}"
@@ -108,6 +112,7 @@ cleanup_cluster() {
     echo ""
     print_warning "Proceeding with TWO-STAGE cluster destruction..."
     print_info "Cleanup log: $LOG_FILE"
+    print_info "Cleanup started at: ${CLEANUP_START_READABLE}"
     echo ""
     sleep 3
     
@@ -204,9 +209,25 @@ cleanup_cluster() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     
     if [[ $CUSTOM_EXIT -eq 0 ]]; then
+    
+        # Calculate total cleanup time
+        CLEANUP_END=$(date +%s)
+        CLEANUP_END_READABLE=$(date "+%Y-%m-%d %H:%M:%S %Z")
+        CLEANUP_DURATION=$((CLEANUP_END - CLEANUP_START))
+        CLEANUP_MINUTES=$((CLEANUP_DURATION / 60))
+        CLEANUP_SECONDS=$((CLEANUP_DURATION % 60))
+        
         echo ""
-        print_success "✅ Complete cluster cleanup finished successfully"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+        print_success "✅ CLEANUP COMPLETED SUCCESSFULLY!"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
         echo ""
+        echo -e "${GREEN}Cluster Name:${NC}    ${CLUSTER_NAME}"
+        echo -e "${GREEN}Start Time:${NC}      ${CLEANUP_START_READABLE}"
+        echo -e "${GREEN}End Time:${NC}        ${CLEANUP_END_READABLE}"
+        echo -e "${GREEN}Total Duration:${NC}  ${CLEANUP_MINUTES}m ${CLEANUP_SECONDS}s"
+        echo ""
+        
         print_info "Cleanup stages:"
         print_info "  • Kubespray reset: $([ $KUBESPRAY_EXIT -eq 0 ] && echo '✅ Success' || echo '⚠️  Had issues')"
         print_info "  • Forceful cleanup: ✅ Success"
