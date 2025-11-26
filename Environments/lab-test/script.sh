@@ -168,7 +168,10 @@ deploy_cluster() {
     print_info "🚀 Starting streamlined deployment process"
     echo ""
     
-    # Step 1: System preparation
+    # ==========================================================================
+    # PHASE 1: SYSTEM PREPARATION
+    # ==========================================================================
+
     print_step "Phase 1: System preparation"
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
@@ -197,30 +200,11 @@ deploy_cluster() {
     print_success "System preparation completed"
     
 
+    # ==========================================================================
+    # PHASE 1.5: FIX KUBESPRAY MODULE SYMLINK
+    # ==========================================================================
 
-
-    # # Step 2: Deploy HAProxy load balancer
-    # print_step "Phase 3: HAProxy load balancer deployment"
-    # cd "$PROJECT_ROOT"
-    
-    # ansible-playbook \
-    #     -i "Ansible/inventory/haproxy_inventory.ini" \
-    #     -e "@$VARS_FILE" \
-    #     -e "cluster_name=${CLUSTER_NAME}" \
-    #     --become \
-    #     Ansible/playbooks/deploy_haproxy_keepalived.yml
-    
-    # if [[ $? -ne 0 ]]; then
-    #     print_error "HAProxy deployment failed"
-    #     exit 1
-    # fi
-    
-    # print_success "HAProxy load balancer deployment completed"
-    
-
-
-    # Step 1.5: Fix Kubespray module before deployment
-    print_step "Fixing Kubespray kube module..."
+    print_step "Phase 1.5: Fixing Kubespray kube module..."
 
     cd "$PROJECT_ROOT/Kubespray/library"
 
@@ -236,7 +220,11 @@ deploy_cluster() {
 
 
 # ---------------------------- UNCOMMENT -------------------------------------
-    # # Step 2: Deploy Kubernetes with Kubespray (includes all platform services)
+
+    ## ==========================================================================
+    ## PHASE 2: KUBERNETES CLUSTER DEPLOYMENT (KUBESPRAY)
+    ## ==========================================================================
+
     # print_step "Phase 2: Kubernetes cluster deployment via Kubespray"
     # print_info "This will install: Kubernetes, CoreDNS, Metrics Server, Dashboard, Ingress"
     
@@ -256,8 +244,12 @@ deploy_cluster() {
 
 
 
-    # Step 2.5: Setup kubeconfig for users
-    print_step "Setting up kubeconfig for non-root users..."
+    # ==========================================================================
+    # PHASE 3: SETUP KUBECONFIG FOR NON-ROOT USERS
+    # ==========================================================================
+
+    print_step "Phase 3: Setting up kubeconfig for non-root users..."
+
 
     cd "$PROJECT_ROOT"
     ansible-playbook \
@@ -275,8 +267,31 @@ deploy_cluster() {
 
 
 
-    # Step 3: Deploy HAProxy load balancer
-    print_step "Phase 3: HAProxy load balancer deployment"
+    # ==========================================================================
+    # PHASE 4: FIX KUBELET CGROUP CONFIGURATION
+    # ==========================================================================
+    print_step "Phase 4: Fixing kubelet cgroup configuration on all nodes..."
+    cd "$PROJECT_ROOT"
+    
+    ansible-playbook \
+        -i "$INVENTORY_DIR/inventory.ini" \
+        -e "@$VARS_FILE" \
+        -e "cluster_name=${CLUSTER_NAME}" \
+        --become \
+        Ansible/playbooks/fix_cgroup_conf_kubelet.yml
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Worker and Master node cgroup configuration fix completed"
+    else
+        print_warning "Worker and Master node cgroup configuration fix had issues (cluster may still be functional)"
+    fi
+
+
+    # ==========================================================================
+    # PHASE 5: DEPLOY HAPROXY LOAD BALANCER
+    # ==========================================================================
+    print_step "Phase 5: HAProxy load balancer deployment"
+
     cd "$PROJECT_ROOT"
     
     ansible-playbook \
@@ -312,26 +327,15 @@ deploy_cluster() {
     #     print_warning "Worker node fix had issues (cluster may still be functional)"
     # fi
     
-    # Step 5: Fix worker and master node kubelet cgroup configuration
-    print_step "Phase 4: Fixing worker and master node kubelet cgroup configuration"
-    
-    ansible-playbook \
-        -i "$INVENTORY_DIR/inventory.ini" \
-        -e "@$VARS_FILE" \
-        -e "cluster_name=${CLUSTER_NAME}" \
-        --become \
-        Ansible/playbooks/fix_cgroup_conf_kubelet.yml
-    
-    if [[ $? -eq 0 ]]; then
-        print_success "Worker and Master node cgroup configuration fix completed"
-    else
-        print_warning "Worker and Master node cgroup configuration fix had issues (cluster may still be functional)"
-    fi
 
-    # Step 6: Deploy Kubernetes Dashboard (if enabled)
+
+    # ==========================================================================
+    # PHASE 6: DEPLOY KUBERNETES DASHBOARD (IF ENABLED)
+    # ==========================================================================
+    
     dashboard_enabled=$(get_yaml_value "services.deploy_dashboard")
     if [[ "$dashboard_enabled" == "True" ]] || [[ "$dashboard_enabled" == "true" ]]; then
-        print_step "Phase X: Setting up Kubernetes Dashboard with admin access"
+        print_step "Phase 6: Setting up Kubernetes Dashboard with admin access"
         
         ansible-playbook \
             -i "$INVENTORY_DIR/inventory.ini" \
@@ -350,10 +354,13 @@ deploy_cluster() {
         print_info "Dashboard setup skipped (services.deploy_dashboard: false)"
     fi
 
-    # Step 7: Setup backups (if enabled)
+    # ==========================================================================
+    # PHASE 7: SETUP BACKUPS (IF ENABLED)
+    # ==========================================================================
+    
     backup_enabled=$(get_yaml_value "backup.enabled")
     if [[ "$backup_enabled" == "True" ]] || [[ "$backup_enabled" == "true" ]]; then
-        print_step "Phase 5: Setting up automated backups"
+        print_step "Phase 7: Setting up automated backups"
         
         ansible-playbook \
             -i "$INVENTORY_DIR/inventory.ini" \
@@ -371,10 +378,13 @@ deploy_cluster() {
         print_info "Backup setup skipped (backup.enabled: false)"
     fi
     
-    # Step 8: Setup maintenance (if enabled)
+    # ==========================================================================
+    # PHASE 8: SETUP MAINTENANCE (IF ENABLED)
+    # ==========================================================================
+    
     maintenance_enabled=$(get_yaml_value "services.setup_maintenance")
     if [[ "$maintenance_enabled" == "True" ]] || [[ "$maintenance_enabled" == "true" ]]; then
-        print_step "Phase 6: Setting up maintenance tasks"
+        print_step "Phase 8: Setting up maintenance tasks"
         
         ansible-playbook \
             -i "$INVENTORY_DIR/inventory.ini" \
@@ -392,8 +402,10 @@ deploy_cluster() {
         print_info "Maintenance setup skipped (services.setup_maintenance: false)"
     fi
     
-    # Step 9: Validate deployment
-    print_step "Phase 8: Deployment validation"
+    # ==========================================================================
+    # PHASE 9: VALIDATE DEPLOYMENT
+    # ==========================================================================
+    print_step "Phase 9: Deployment validation"
     
     ansible-playbook \
         -i "$INVENTORY_DIR/inventory.ini" \
@@ -417,6 +429,11 @@ deploy_cluster() {
     DEPLOYMENT_DURATION=$((DEPLOYMENT_END - DEPLOYMENT_START))
     DEPLOYMENT_MINUTES=$((DEPLOYMENT_DURATION / 60))
     DEPLOYMENT_SECONDS=$((DEPLOYMENT_DURATION % 60))
+    
+    
+    # ==========================================================================
+    # DEPLOYMENT COMPLETE - DISPLAY SUMMARY
+    # ==========================================================================
     
     # Display success summary with timing
     echo ""
